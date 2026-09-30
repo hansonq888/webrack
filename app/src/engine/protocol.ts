@@ -15,6 +15,7 @@ export const Op = {
   SongSeek: 10, // a = frame
   MasterGain: 11, // f
   StopAfterSteps: 12, // a = steps (export: play exactly N loops)
+  PatternLength: 13, // a = 16, 32 or 64
 } as const
 
 export const ReverbParam = { Size: 0, Damping: 1, PreDelayMs: 2, Mix: 3 } as const

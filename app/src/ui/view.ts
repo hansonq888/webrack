@@ -1,8 +1,20 @@
-import { EXPORT_LOOPS, FLAT_VIBE, NUM_PADS, NUM_STEPS, SLOWED_REVERB, Studio, type ExportResult, type Vibe } from '../state/studio'
+import {
+  EXPORT_LOOPS,
+  FLAT_VIBE,
+  NUM_PADS,
+  SLOWED_REVERB,
+  STEP_COUNTS,
+  Studio,
+  type ExportResult,
+  type RecordEvent,
+  type Vibe,
+} from '../state/studio'
 import { MAX_RECORD_SECONDS } from '../audio/recorder'
 import { Knob, type KnobOptions } from './knob'
+import { FINISHES, applyFinish, type Finish } from './finish'
 
 const PAD_KEYS = '1234qwerasdfzxcv'
+const PAGE_STEPS = 16 // steps shown at once; longer patterns are paged
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector<T>(sel)!
 
@@ -17,8 +29,9 @@ export function mountStartScreen(root: HTMLElement, onStart: () => Promise<void>
       </div>
       <p class="start-pitch">Make a beat with your voice.<br />Slow it down. Drown it in reverb.</p>
       <button class="key key-orange key-start" id="start">Start</button>
-      <p class="fine-print">No signup. Your audio never leaves this device.</p>
+      ${deviceFoot('No signup. Your audio never leaves this device.')}
     </div>`
+  bindFinishSwitch(root)
   const button = $<HTMLButtonElement>(root, '#start')
   button.addEventListener('click', async () => {
     button.disabled = true
@@ -34,14 +47,41 @@ export function mountStartScreen(root: HTMLElement, onStart: () => Promise<void>
   })
 }
 
+// Footer: fine print plus the finish (colorway) switch.
+function deviceFoot(text: string): string {
+  return `
+    <footer class="device-foot">
+      <p class="fine-print">${text}</p>
+      <div class="seg finish-switch" role="group" aria-label="Finish">
+        ${FINISHES.map((f) => `<button class="key key-tiny" data-finish="${f}">${f}</button>`).join('')}
+      </div>
+    </footer>`
+}
+
+function bindFinishSwitch(root: HTMLElement): void {
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-finish]')]
+  const sync = () =>
+    buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.finish === document.documentElement.dataset.finish)))
+  buttons.forEach((b) =>
+    b.addEventListener('click', () => {
+      applyFinish(b.dataset.finish as Finish)
+      sync()
+    }),
+  )
+  sync()
+}
+
 function deviceTop(): string {
   return `
     <header class="device-top">
       <div class="brand">
         <span class="wordmark">webrack</span>
-        <span class="model">WR-16 · voice sampler</span>
+        <span class="model">WR-16 · Sampling console</span>
       </div>
-      <div class="screws" aria-hidden="true"><i></i><i></i></div>
+      <div class="lamps" aria-hidden="true">
+        <span class="lamp-group"><i class="lamp lamp-rec"></i>Rec</span>
+        <span class="lamp-group"><i class="lamp lamp-run"></i>Run</span>
+      </div>
     </header>`
 }
 
@@ -57,7 +97,7 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
               <span class="beat-only">BPM <b id="lcd-bpm"></b></span>
               <span>SPD <b id="lcd-speed"></b></span>
             </div>
-            <div class="lcd-steps beat-only">${'<i></i>'.repeat(NUM_STEPS)}</div>
+            <div class="lcd-steps beat-only" id="lcd-steps"></div>
             <div class="lcd-progress song-only"><i id="lcd-progress"></i></div>
             <div class="lcd-row">
               <span id="lcd-msg" class="lcd-msg"></span>
@@ -81,15 +121,23 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
             </div>
 
             <div class="pad-tools">
-              <button class="key key-red" id="rec"><i class="rec-dot"></i> Rec</button>
+              <button class="key key-red" id="rec"><i class="rec-dot"></i> <span id="rec-label">Rec</span></button>
               <button class="key" id="load">Load</button>
               <button class="key" id="reset">Reset</button>
               <input type="file" id="load-input" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" hidden />
             </div>
 
             <div class="section-label"><span>Steps</span><b id="steps-pad"></b></div>
+            <div class="steps-bar">
+              <div class="seg" role="group" aria-label="Pattern length">
+                ${STEP_COUNTS.map((n) => `<button class="key key-small" data-count="${n}">${n}</button>`).join('')}
+              </div>
+              <div class="seg pages" role="group" aria-label="Bar">
+                ${[0, 1, 2, 3].map((p) => `<button class="key key-small" data-page="${p}" aria-label="Bar ${p + 1}">${p + 1}<i class="page-led"></i></button>`).join('')}
+              </div>
+            </div>
             <div class="steps" role="group" aria-label="Steps">
-              ${Array.from({ length: NUM_STEPS }, (_, i) => `<button class="step" data-step="${i}" aria-label="Step ${i + 1}"><i></i></button>`).join('')}
+              ${Array.from({ length: PAGE_STEPS }, (_, i) => `<button class="step" data-step="${i}"><i></i></button>`).join('')}
             </div>
           </section>
 
@@ -104,8 +152,11 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
 
           <div class="transport">
             <button class="key key-orange key-play" id="play" aria-label="Play">▶</button>
-            <button class="key beat-only" id="bpm-down" aria-label="Slower">BPM −</button>
-            <button class="key beat-only" id="bpm-up" aria-label="Faster">BPM +</button>
+            <label class="fader beat-only">
+              <span class="fader-label">BPM</span>
+              <input type="range" id="bpm" min="60" max="180" step="1" aria-label="Tempo in BPM" />
+              <output id="bpm-out"></output>
+            </label>
             <button class="key beat-only" id="clear">Clear</button>
           </div>
         </div>
@@ -131,16 +182,19 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
           </div>
         </div>
       </div>
-      <p class="fine-print">Your audio never leaves this device. Drag an audio file onto a pad to load it.</p>
+      ${deviceFoot('Your audio never leaves this device. Drag an audio file onto a pad to load it.')}
     </div>`
 
+  bindFinishSwitch(root)
   new StudioView(root, studio)
 }
 
 class StudioView {
   private readonly pads: HTMLButtonElement[]
   private readonly steps: HTMLButtonElement[]
-  private readonly lcdSteps: HTMLElement[]
+  private lcdSteps: HTMLElement[] = []
+  private lcdStepCount = 0
+  private page = 0 // which 16-step bar the step keys show
   private readonly knobs = new Map<keyof Vibe, Knob>()
   private message: { text: string; until: number } | null = null
   private exportUrl: string | null = null
@@ -154,11 +208,11 @@ class StudioView {
     this.studio = studio
     this.pads = [...root.querySelectorAll<HTMLButtonElement>('.pad')]
     this.steps = [...root.querySelectorAll<HTMLButtonElement>('.step')]
-    this.lcdSteps = [...root.querySelectorAll<HTMLElement>('.lcd-steps i')]
     this.buildKnobs()
     this.bindPads()
     this.bindControls()
     studio.onChange = () => this.render()
+    studio.onRecordEvent = (event) => this.onRecordEvent(event)
     this.render()
     requestAnimationFrame(this.frame)
   }
@@ -226,7 +280,9 @@ class StudioView {
       if (!e.repeat) this.hit(i)
     })
 
-    this.steps.forEach((step, i) => step.addEventListener('click', () => s.toggleStep(s.selected, i)))
+    this.steps.forEach((step, i) =>
+      step.addEventListener('click', () => s.toggleStep(s.selected, this.page * PAGE_STEPS + i)),
+    )
   }
 
   private bindControls(): void {
@@ -248,8 +304,17 @@ class StudioView {
     on('#reset', () => void s.resetPad(s.selected).then(() => this.flash('KIT SOUND RESTORED')))
 
     on('#play', () => s.togglePlay())
-    on('#bpm-down', (e) => s.setBpm(s.bpm - ((e as MouseEvent).shiftKey ? 10 : 1)))
-    on('#bpm-up', (e) => s.setBpm(s.bpm + ((e as MouseEvent).shiftKey ? 10 : 1)))
+    const bpm = $<HTMLInputElement>(this.root, '#bpm')
+    bpm.addEventListener('input', () => s.setBpm(Number(bpm.value)))
+    this.root.querySelectorAll<HTMLButtonElement>('[data-count]').forEach((b) =>
+      b.addEventListener('click', () => s.setStepCount(Number(b.dataset.count) as 16 | 32 | 64)),
+    )
+    this.root.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.page = Number(b.dataset.page)
+        this.render()
+      }),
+    )
     on('#clear', () => {
       s.clearPattern()
       this.flash('PATTERN CLEARED')
@@ -304,21 +369,42 @@ class StudioView {
     pad.classList.add('hit')
   }
 
+  // Rec arms the mic; the take starts on sound and ends on silence. Tapping
+  // again stops early (or cancels if nothing has been heard yet).
   private async toggleRecording(): Promise<void> {
     const s = this.studio
+    if (s.recording) {
+      s.stopRecording()
+      return
+    }
     try {
-      if (s.recording) {
-        const ok = await s.stopRecording()
-        this.flash(ok ? `RECORDED ON PAD ${s.selected + 1}` : "DIDN'T HEAR ANYTHING")
-        if (ok) s.hit(s.selected)
-      } else {
-        await s.startRecording()
-      }
+      await s.armRecording()
     } catch (err) {
       console.error(err)
-      this.flash('MIC BLOCKED · CHECK PERMISSIONS', 4000)
+      this.flash('MIC BLOCKED · ALLOW THE MICROPHONE', 4000)
     }
-    this.render()
+  }
+
+  private onRecordEvent(event: RecordEvent): void {
+    const n = event.pad + 1
+    switch (event.type) {
+      case 'started':
+        navigator.vibrate?.(35) // Android; iOS doesn't let websites vibrate
+        break
+      case 'recorded':
+        this.flash(`RECORDED ON PAD ${n}`)
+        this.hit(event.pad)
+        break
+      case 'silent':
+        this.flash("DIDN'T CATCH THAT · TRY AGAIN", 2500)
+        break
+      case 'cancelled':
+        this.flash('RECORDING CANCELLED')
+        break
+      case 'timeout':
+        this.flash('NO SOUND HEARD · TAP REC AGAIN', 3000)
+        break
+    }
   }
 
   private async loadToPad(pad: number, file: File): Promise<void> {
@@ -375,7 +461,7 @@ class StudioView {
     download.href = this.exportUrl
     download.download = result.fileName
     const mb = (result.blob.size / 1e6).toFixed(1)
-    const what = this.studio.mode === 'beat' ? `${EXPORT_LOOPS} loops · ` : ''
+    const what = this.studio.mode === 'beat' ? `${EXPORT_LOOPS} × ${this.studio.stepCount / PAGE_STEPS} bars · ` : ''
     $(this.root, '#export-file').textContent =
       `${result.fileName} · ${what}${formatTime(result.seconds)} · ${mb} MB · rendered in ${(result.renderMs / 1000).toFixed(1)} s`
     const file = new File([result.blob], result.fileName, { type: 'audio/wav' })
@@ -408,24 +494,51 @@ class StudioView {
     )
     $(this.root, '#lcd-mode').textContent = s.mode === 'beat' ? 'BEAT' : 'SONG'
     $(this.root, '#lcd-bpm').textContent = String(s.bpm).padStart(3, '0')
+    $(this.root, '#bpm-out').textContent = String(s.bpm)
+    const bpmInput = $<HTMLInputElement>(this.root, '#bpm')
+    if (document.activeElement !== bpmInput) bpmInput.value = String(s.bpm)
     $(this.root, '#lcd-speed').textContent = `${s.vibe.speed.toFixed(2)}×`
 
     this.pads.forEach((pad, i) => {
       $(pad, '.pad-name').textContent = s.pads[i]?.name ?? ''
       pad.classList.toggle('selected', i === s.selected)
       pad.classList.toggle('custom', !!s.pads[i]?.custom)
-      pad.classList.toggle('has-steps', s.pattern[i].some(Boolean))
+      pad.classList.toggle('has-steps', s.padHasSteps(i))
       pad.setAttribute('aria-label', `Pad ${i + 1}: ${s.pads[i]?.name ?? 'empty'} (key ${PAD_KEYS[i].toUpperCase()})`)
     })
+    // Pattern length and bar pages.
+    const bars = s.stepCount / PAGE_STEPS
+    if (this.page >= bars) this.page = 0
+    this.root.querySelectorAll<HTMLButtonElement>('[data-count]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(Number(b.dataset.count) === s.stepCount)),
+    )
+    this.root.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) => {
+      const p = Number(b.dataset.page)
+      b.hidden = bars === 1 || p >= bars
+      b.setAttribute('aria-pressed', String(p === this.page))
+    })
     this.steps.forEach((step, i) => {
-      const on = s.pattern[s.selected][i]
+      const index = this.page * PAGE_STEPS + i
+      const on = s.pattern[s.selected][index]
       step.classList.toggle('on', on)
       step.setAttribute('aria-pressed', String(on))
+      step.setAttribute('aria-label', `Step ${index + 1}`)
     })
+    if (this.lcdStepCount !== s.stepCount) {
+      const lcd = $(this.root, '#lcd-steps')
+      lcd.innerHTML = '<i></i>'.repeat(s.stepCount)
+      lcd.style.setProperty('--steps', String(s.stepCount))
+      this.lcdSteps = [...lcd.querySelectorAll<HTMLElement>('i')]
+      this.lcdStepCount = s.stepCount
+    }
     $(this.root, '#steps-pad').textContent = s.pads[s.selected]?.name ?? ''
 
-    const rec = $(this.root, '#rec')
-    rec.classList.toggle('recording', !!s.recording)
+    // Recording state drives the Rec key, the target pad and the REC lamp.
+    const recState = s.recording?.state
+    const rec = recState === 'recording' ? 'live' : recState === 'armed' ? 'armed' : ''
+    this.root.querySelector('.device')!.setAttribute('data-rec', rec)
+    $(this.root, '#rec-label').textContent = rec === 'live' ? 'Stop' : rec === 'armed' ? 'Armed' : 'Rec'
+    this.pads.forEach((pad, i) => pad.classList.toggle('rec-target', !!rec && i === s.recordingPad))
     $(this.root, '#reset').toggleAttribute('disabled', !s.pads[s.selected]?.custom)
 
     if (s.song) {
@@ -446,10 +559,16 @@ class StudioView {
     play.classList.toggle('lit', playing)
 
     this.lcdSteps.forEach((dot, i) => dot.classList.toggle('now', i === st.step))
-    this.steps.forEach((step, i) => step.classList.toggle('now', i === st.step))
+    this.steps.forEach((step, i) => step.classList.toggle('now', this.page * PAGE_STEPS + i === st.step))
+    this.root.querySelectorAll<HTMLElement>('[data-page]').forEach((b) =>
+      b.classList.toggle('playing', st.step >= 0 && Math.floor(st.step / PAGE_STEPS) === Number(b.dataset.page)),
+    )
 
-    $(this.root, '#meter-l').style.transform = `scaleX(${meter(st.peakLeft)})`
-    $(this.root, '#meter-r').style.transform = `scaleX(${meter(st.peakRight)})`
+    // While recording, the meters show the mic input instead of the output.
+    const input = s.recording?.level
+    $(this.root, '#meter-l').style.setProperty('--level', String(meter(input ?? st.peakLeft)))
+    $(this.root, '#meter-r').style.setProperty('--level', String(meter(input ?? st.peakRight)))
+    this.root.querySelector('.device')!.classList.toggle('running', playing)
 
     const progress = st.songLength > 0 ? st.songFrame / st.songLength : 0
     $(this.root, '#lcd-progress').style.transform = `scaleX(${progress})`
@@ -461,9 +580,10 @@ class StudioView {
 
   private lcdMessage(songFrame: number): string {
     const s = this.studio
-    if (s.recording) {
+    if (s.recording?.state === 'armed') return `ARMED · MAKE A SOUND · PAD ${s.recordingPad + 1}`
+    if (s.recording?.state === 'recording') {
       const secs = Math.min(s.recording.seconds, MAX_RECORD_SECONDS)
-      return `● REC ${secs.toFixed(1)}s · PAD ${s.selected + 1}`
+      return `● REC ${secs.toFixed(1)}s · PAD ${s.recordingPad + 1}`
     }
     if (this.message && performance.now() < this.message.until) return this.message.text
     if (s.mode === 'song') {

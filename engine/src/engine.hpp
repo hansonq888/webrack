@@ -54,6 +54,7 @@ public:
     void set_bpm(float bpm) { sequencer_.set_bpm(bpm, now_); }
     void set_playing(bool playing) { sequencer_.set_playing(playing, now_); }
     void stop_after_steps(std::int64_t steps) { sequencer_.stop_after(steps); }
+    void set_pattern_length(std::size_t steps) { sequencer_.set_length(static_cast<std::uint32_t>(steps)); }
 
     // Song. Same begin / write / commit protocol as pads, interleaved stereo.
     std::int16_t* song_data() { return song_storage_.data(); }

@@ -9,7 +9,8 @@
 
 namespace webrack {
 
-// 16-step, 16-pad pattern sequencer, clocked in samples by the engine.
+// 16-pad pattern sequencer of up to 64 steps, clocked in samples by the engine.
+// Each pad's pattern is a 64-bit mask; only the first `length` steps play.
 //
 // Step k fires at frame anchor_frame + round((k - anchor_step) * step_frames),
 // computed from integers each time rather than accumulated, so hits never
@@ -19,25 +20,30 @@ class Sequencer {
 public:
     struct Hit {
         std::uint32_t offset;  // frame within the block
-        std::uint32_t step;    // 0..15
+        std::uint32_t step;    // 0..length-1
     };
     static constexpr std::size_t kMaxHitsPerBlock = 4;
 
+    // Full reset: tempo, speed, length, pattern and transport.
     void init(float sample_rate) {
+        *this = Sequencer{};
         sample_rate_ = sample_rate;
-        playing_ = false;
-        current_step_ = -1;
-        pattern_.fill(0);
         update_step_frames();
     }
 
     void set_step(std::uint32_t pad, std::uint32_t step, bool on) {
-        if (pad >= kNumPads || step >= kNumSteps) return;
-        const auto bit = static_cast<std::uint16_t>(1u << step);
+        if (pad >= kNumPads || step >= kMaxSteps) return;
+        const std::uint64_t bit = std::uint64_t{1} << step;
         pattern_[pad] = on ? (pattern_[pad] | bit) : (pattern_[pad] & ~bit);
     }
     void clear() { pattern_.fill(0); }
     bool step_on(std::uint32_t pad, std::uint32_t step) const { return (pattern_[pad] >> step) & 1u; }
+
+    // 16, 32 or 64. Steps beyond the length keep their state but don't play.
+    void set_length(std::uint32_t steps) {
+        if (steps == 16 || steps == 32 || steps == 64) length_ = steps;
+    }
+    std::uint32_t length() const { return length_; }
 
     void set_bpm(float bpm, std::int64_t now) {
         bpm_ = std::fmax(kMinBpm, std::fmin(kMaxBpm, bpm));
@@ -73,7 +79,7 @@ public:
                 playing_ = false;
                 break;
             }
-            const auto step = static_cast<std::uint32_t>(next_step_ % kNumSteps);
+            const auto step = static_cast<std::uint32_t>(next_step_ % length_);
             out[n++] = {static_cast<std::uint32_t>(t < now ? 0 : t - now), step};
             current_step_ = static_cast<std::int32_t>(step);
             ++next_step_;
@@ -106,7 +112,8 @@ private:
         anchor_step_ = next_step_;
     }
 
-    std::array<std::uint16_t, kNumPads> pattern_{};
+    std::array<std::uint64_t, kNumPads> pattern_{};
+    std::uint32_t length_ = kDefaultSteps;
     float sample_rate_ = 48000.0f;
     float bpm_ = 90.0f;
     float speed_ = 1.0f;

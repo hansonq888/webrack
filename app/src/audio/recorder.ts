@@ -1,22 +1,32 @@
 import recorderUrl from '../worklet/recorder-processor.ts?worker&url'
+import { DEFAULT_GATE, RecordGate, type GateState } from './record-gate'
 import { setAudioSession } from './session'
 
-export const MAX_RECORD_SECONDS = 4
+export const MAX_RECORD_SECONDS = DEFAULT_GATE.maxSeconds
+const ARMED_TIMEOUT_MS = 10_000
+
+export type RecordingEnd = 'done' | 'stopped' | 'cancelled' | 'timeout'
+
+export interface RecordingHandlers {
+  onStart(): void
+  onEnd(audio: Float32Array | null, why: RecordingEnd): void
+}
 
 let moduleAdded: Promise<void> | null = null
 
-// One take from the mic. Voice-processing filters (echo cancellation, noise
-// suppression, auto gain) are turned off: they mangle beatbox sounds.
+// One sound-triggered take from the mic: armed until you make a sound, then
+// recording until you go quiet (see RecordGate). Voice-processing filters
+// (echo cancellation, noise suppression, auto gain) are turned off: they
+// mangle beatbox sounds.
 export class Recording {
-  private readonly chunks: Float32Array[] = []
-  private frames = 0
-  private stopped: Promise<Float32Array> | null = null
-  private readonly timer: ReturnType<typeof setTimeout>
-  private readonly context: AudioContext
+  private readonly gate: RecordGate
+  private readonly handlers: RecordingHandlers
   private readonly stream: MediaStream
   private readonly source: MediaStreamAudioSourceNode
   private readonly node: AudioWorkletNode
   private readonly sink: GainNode
+  private readonly armedTimer: ReturnType<typeof setTimeout>
+  private ended = false
 
   private constructor(
     context: AudioContext,
@@ -24,22 +34,28 @@ export class Recording {
     source: MediaStreamAudioSourceNode,
     node: AudioWorkletNode,
     sink: GainNode,
-    onAutoStop: () => void,
+    handlers: RecordingHandlers,
   ) {
-    this.context = context
+    this.gate = new RecordGate(context.sampleRate)
+    this.handlers = handlers
     this.stream = stream
     this.source = source
     this.node = node
     this.sink = sink
     node.port.onmessage = (event: MessageEvent<{ type: 'chunk'; data: Float32Array }>) => {
-      if (event.data.type !== 'chunk') return
-      this.chunks.push(event.data.data)
-      this.frames += event.data.data.length
+      if (event.data.type !== 'chunk' || this.ended) return
+      const change = this.gate.push(event.data.data)
+      if (change === 'start') {
+        clearTimeout(this.armedTimer)
+        handlers.onStart()
+      } else if (change === 'stop') {
+        this.end('done')
+      }
     }
-    this.timer = setTimeout(onAutoStop, MAX_RECORD_SECONDS * 1000)
+    this.armedTimer = setTimeout(() => this.end('timeout'), ARMED_TIMEOUT_MS)
   }
 
-  static async start(context: AudioContext, onAutoStop: () => void): Promise<Recording> {
+  static async start(context: AudioContext, handlers: RecordingHandlers): Promise<Recording> {
     setAudioSession('play-and-record')
     let stream: MediaStream
     try {
@@ -58,44 +74,38 @@ export class Recording {
     const sink = context.createGain()
     sink.gain.value = 0
     source.connect(node).connect(sink).connect(context.destination)
-    return new Recording(context, stream, source, node, sink, onAutoStop)
+    return new Recording(context, stream, source, node, sink, handlers)
   }
 
+  get state(): GateState {
+    return this.gate.state
+  }
+  /** Latest input peak (0–1), for the meter. */
+  get level(): number {
+    return this.gate.level
+  }
+  /** Seconds since the sound started. */
   get seconds(): number {
-    return this.frames / this.context.sampleRate
+    return this.gate.seconds
   }
 
-  /** Stops recording and returns the raw take at the context's sample rate. */
-  stop(): Promise<Float32Array> {
-    this.stopped ??= new Promise((resolve) => {
-      clearTimeout(this.timer)
-      this.node.port.onmessage = (event: MessageEvent<{ type: 'chunk' | 'done'; data?: Float32Array }>) => {
-        if (event.data.type === 'chunk' && event.data.data) {
-          this.chunks.push(event.data.data)
-          this.frames += event.data.data.length
-        } else if (event.data.type === 'done') {
-          this.teardown()
-          const maxFrames = MAX_RECORD_SECONDS * this.context.sampleRate
-          const out = new Float32Array(Math.min(this.frames, maxFrames))
-          let offset = 0
-          for (const chunk of this.chunks) {
-            if (offset >= out.length) break
-            out.set(chunk.subarray(0, out.length - offset), offset)
-            offset += chunk.length
-          }
-          resolve(out)
-        }
-      }
-      this.node.port.postMessage({ type: 'stop' })
-    })
-    return this.stopped
+  /** Manual stop: keeps the take if one started, otherwise cancels. */
+  stop(): void {
+    this.end(this.gate.state === 'recording' ? 'stopped' : 'cancelled')
   }
 
-  private teardown(): void {
+  private end(why: RecordingEnd): void {
+    if (this.ended) return
+    this.ended = true
+    clearTimeout(this.armedTimer)
+    const hadTake = why === 'done' || why === 'stopped'
+    this.gate.finish()
+    this.node.port.postMessage({ type: 'stop' })
     this.source.disconnect()
     this.node.disconnect()
     this.sink.disconnect()
     for (const track of this.stream.getTracks()) track.stop()
     setAudioSession('playback')
+    this.handlers.onEnd(hadTake ? this.gate.audio() : null, why)
   }
 }

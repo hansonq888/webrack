@@ -63,7 +63,7 @@ static void test_sequencer_is_sample_accurate() {
             Engine& e = g_engine;
             e.init(kRate);
             load_pad(e, 0, {1.0f});  // a single-sample impulse
-            for (std::size_t s = 0; s < kNumSteps; ++s) e.set_step(0, s, true);
+            for (std::size_t s = 0; s < kDefaultSteps; ++s) e.set_step(0, s, true);
             e.set_bpm(bpm);
             e.set_speed(speed);
             e.set_playing(true);
@@ -140,12 +140,34 @@ static void test_retrigger_chokes_same_pad() {
     CHECK(std::fabs(level - 0.25f) < 1e-6f, "retriggered level %f, expected a single voice at 0.25", level);
 }
 
+// Longer patterns: only the last step is set, so it must fire once per loop.
+static void test_longer_patterns() {
+    std::printf("32- and 64-step patterns\n");
+    for (std::size_t length : {32u, 64u}) {
+        Engine& e = g_engine;
+        e.init(kRate);
+        load_pad(e, 0, {1.0f});
+        e.set_pattern_length(length);
+        e.set_step(0, length - 1, true);
+        e.set_bpm(120);  // 6000 frames per step at 48 kHz
+        e.set_playing(true);
+        const auto out = render(e, 2 * length * 6000 / kBlockSize + 1);
+        std::vector<std::size_t> hits;
+        for (std::size_t i = 0; i < out.size(); ++i)
+            if (out[i] != 0.0f) hits.push_back(i);
+        const std::size_t first = (length - 1) * 6000;
+        CHECK(hits.size() == 2 && hits[0] == first && hits[1] == first + length * 6000,
+              "%zu steps: expected hits at %zu and %zu, got %zu hits (first at %zu)", length, first,
+              first + length * 6000, hits.size(), hits.empty() ? std::size_t{0} : hits[0]);
+    }
+}
+
 static void test_process_never_allocates() {
     std::printf("no allocations in process()\n");
     Engine& e = g_engine;
     e.init(kRate);
     load_pad(e, 0, std::vector<float>(4800, 0.1f));
-    for (std::size_t s = 0; s < kNumSteps; ++s) e.set_step(0, s, true);
+    for (std::size_t s = 0; s < kDefaultSteps; ++s) e.set_step(0, s, true);
     e.set_reverb(dsp::Reverb::Mix, 0.4f);
     e.set_eq_gain(0, 6.0f);
     e.set_playing(true);
@@ -162,6 +184,7 @@ int main() {
     test_reverb_mix_zero_is_bypass();
     test_polyphony_and_stealing();
     test_retrigger_chokes_same_pad();
+    test_longer_patterns();
     test_process_never_allocates();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

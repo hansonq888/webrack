@@ -3,13 +3,15 @@ import { Op, ReverbParam, type Command } from '../engine/protocol'
 import { DEMO_BPM, DEMO_KIT, DEMO_PATTERN } from '../audio/kit'
 import { decodeFile, resample, toInterleavedInt16, toMono } from '../audio/decode'
 import { autoTrim, normalize } from '../audio/trim'
-import { Recording } from '../audio/recorder'
+import { Recording, type RecordingEnd } from '../audio/recorder'
 import { setAudioSession } from '../audio/session'
 import { encodeWav } from '../audio/wav'
 import { load, save } from './storage'
 
 export const NUM_PADS = 16
-export const NUM_STEPS = 16
+export const MAX_STEPS = 64
+export const STEP_COUNTS = [16, 32, 64] as const
+export type StepCount = (typeof STEP_COUNTS)[number]
 export const EXPORT_LOOPS = 4
 const EXPORT_TAIL_SECONDS = 3
 const MASTER_GAIN = 0.45
@@ -52,6 +54,11 @@ export interface Song {
   truncated: boolean
 }
 
+export type RecordEvent = {
+  type: 'started' | 'recorded' | 'silent' | 'cancelled' | 'timeout'
+  pad: number
+}
+
 export interface ExportResult {
   blob: Blob
   fileName: string
@@ -67,6 +74,7 @@ interface SavedPad {
 }
 interface SavedSession {
   pattern: boolean[][]
+  stepCount?: StepCount
   bpm: number
   vibe: Vibe
   selected: number
@@ -78,13 +86,17 @@ export class Studio {
   mode: Mode = 'beat'
   pads: Pad[] = []
   selected = 0
-  pattern: boolean[][] = Array.from({ length: NUM_PADS }, () => Array(NUM_STEPS).fill(false))
+  // Always MAX_STEPS wide; only the first stepCount steps play.
+  pattern: boolean[][] = Array.from({ length: NUM_PADS }, () => Array(MAX_STEPS).fill(false))
+  stepCount: StepCount = 16
   bpm = DEMO_BPM
   playing = false
   vibe: Vibe = { ...FLAT_VIBE }
   song: Song | null = null
   recording: Recording | null = null
+  recordingPad = 0
   onChange: () => void = () => {}
+  onRecordEvent: (event: RecordEvent) => void = () => {}
 
   readonly context: AudioContext
   readonly engine: EngineClient
@@ -126,22 +138,37 @@ export class Studio {
     this.changed()
   }
 
-  async startRecording(): Promise<void> {
+  /**
+   * Arms the mic for the selected pad. Recording starts on its own when you
+   * make a sound and ends when you go quiet; `onRecordEvent` reports progress.
+   */
+  async armRecording(): Promise<void> {
     if (this.recording) return
-    this.recording = await Recording.start(this.context, () => void this.stopRecording())
+    const pad = this.selected
+    this.recordingPad = pad
+    this.recording = await Recording.start(this.context, {
+      onStart: () => {
+        this.onRecordEvent({ type: 'started', pad })
+        this.changed(false)
+      },
+      onEnd: (audio, why) => void this.finishRecording(pad, audio, why),
+    })
     this.changed(false)
   }
 
-  /** Returns false if the take was silent. */
-  async stopRecording(): Promise<boolean> {
-    const recording = this.recording
-    if (!recording) return false
-    const raw = await recording.stop()
+  /** Stops early (keeping the take), or cancels if no sound has started yet. */
+  stopRecording(): void {
+    this.recording?.stop()
+  }
+
+  private async finishRecording(pad: number, audio: Float32Array | null, why: RecordingEnd): Promise<void> {
     this.recording = null
-    const trimmed = autoTrim(raw, this.sampleRate)
-    if (trimmed) await this.setPad(this.selected, { name: `Rec ${this.selected + 1}`, data: trimmed, custom: true })
-    this.changed()
-    return trimmed !== null
+    const trimmed = audio && autoTrim(audio, this.sampleRate)
+    if (trimmed) await this.setPad(pad, { name: `Rec ${pad + 1}`, data: trimmed, custom: true })
+    this.onRecordEvent(
+      trimmed ? { type: 'recorded', pad } : { type: why === 'timeout' ? 'timeout' : audio ? 'silent' : 'cancelled', pad },
+    )
+    this.changed(!!trimmed)
   }
 
   async loadFileToPad(pad: number, file: File): Promise<void> {
@@ -164,6 +191,32 @@ export class Studio {
     this.pattern[pad][step] = on
     this.engine.setStep(pad, step, on)
     this.changed()
+  }
+
+  /**
+   * Sets the pattern length. Growing it repeats what's there into the new
+   * bars (so a 1-bar beat becomes the same beat twice, ready to vary);
+   * shrinking keeps the hidden steps for when you grow it back.
+   */
+  setStepCount(count: StepCount): void {
+    const old = this.stepCount
+    if (count === old) return
+    if (count > old) {
+      this.pattern.forEach((row, pad) => {
+        for (let s = old; s < count; s++) {
+          row[s] = row[s % old]
+          this.engine.setStep(pad, s, row[s])
+        }
+      })
+    }
+    this.stepCount = count
+    this.engine.send([Op.PatternLength, count, 0, 0])
+    this.changed()
+  }
+
+  /** Whether a pad has any hits in the playing length. */
+  padHasSteps(pad: number): boolean {
+    return this.pattern[pad].slice(0, this.stepCount).some(Boolean)
   }
 
   clearPattern(): void {
@@ -247,11 +300,16 @@ export class Studio {
       frames = Math.ceil(this.song.frames / this.vibe.speed) + tail
       commands.push([Op.SongPlaying, 1, 0, 0])
     } else {
-      const steps = EXPORT_LOOPS * NUM_STEPS
+      const steps = EXPORT_LOOPS * this.stepCount
       const stepFrames = (sr * 60) / this.bpm / 4 / this.vibe.speed
       frames = Math.ceil(steps * stepFrames) + tail
       this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
-      commands.push([Op.Bpm, 0, 0, this.bpm], [Op.Playing, 1, 0, 0], [Op.StopAfterSteps, steps, 0, 0])
+      commands.push(
+        [Op.PatternLength, this.stepCount, 0, 0],
+        [Op.Bpm, 0, 0, this.bpm],
+        [Op.Playing, 1, 0, 0],
+        [Op.StopAfterSteps, steps, 0, 0],
+      )
     }
 
     const t0 = performance.now()
@@ -295,7 +353,9 @@ export class Studio {
     await Promise.all(this.pads.map((p, i) => this.engine.loadPad(i, p.data)))
 
     if (session) {
-      this.pattern = session.pattern
+      // Older sessions saved 16-step rows; widen them.
+      this.pattern = session.pattern.map((row) => [...row, ...Array(Math.max(0, MAX_STEPS - row.length)).fill(false)])
+      this.stepCount = session.stepCount ?? 16
       this.bpm = session.bpm
       this.vibe = { ...FLAT_VIBE, ...session.vibe }
       this.selected = session.selected
@@ -303,7 +363,12 @@ export class Studio {
       for (const [pad, steps] of Object.entries(DEMO_PATTERN)) for (const s of steps) this.pattern[Number(pad)][s] = true
     }
 
-    const commands: Command[] = [[Op.MasterGain, 0, 0, MASTER_GAIN], [Op.Bpm, 0, 0, this.bpm], ...vibeCommands(this.vibe)]
+    const commands: Command[] = [
+      [Op.MasterGain, 0, 0, MASTER_GAIN],
+      [Op.PatternLength, this.stepCount, 0, 0],
+      [Op.Bpm, 0, 0, this.bpm],
+      ...vibeCommands(this.vibe),
+    ]
     this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
     await this.engine.applyNow(commands)
   }
@@ -316,7 +381,13 @@ export class Studio {
   }
 
   private async persist(): Promise<void> {
-    const session: SavedSession = { pattern: this.pattern, bpm: this.bpm, vibe: this.vibe, selected: this.selected }
+    const session: SavedSession = {
+      pattern: this.pattern,
+      stepCount: this.stepCount,
+      bpm: this.bpm,
+      vibe: this.vibe,
+      selected: this.selected,
+    }
     const pads: SavedPad[] = []
     this.pads.forEach((p, index) => {
       if (p.custom && p.data) pads.push({ index, name: p.name, sampleRate: this.sampleRate, data: p.data })

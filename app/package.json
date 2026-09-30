@@ -7,15 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "bench": "node scripts/bench.ts"
+    "bench": "node scripts/bench.ts",
+    "test": "node tests/record-gate.test.ts"
   },
   "devDependencies": {
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-mono": "^5.3.0",
-    "@fontsource/space-grotesk": "^5.3.0",
-    "@fontsource/vt323": "^5.3.0"
+    "@fontsource/chakra-petch": "^5.3.0",
+    "@fontsource/dotgothic16": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0"
   }
 }

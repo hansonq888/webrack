@@ -9,7 +9,9 @@ inline constexpr std::size_t kBlockSize = 128;
 inline constexpr std::size_t kNumChannels = 2;
 
 inline constexpr std::size_t kNumPads = 16;
-inline constexpr std::size_t kNumSteps = 16;
+// Patterns are 16, 32 or 64 steps (1, 2 or 4 bars of sixteenth notes).
+inline constexpr std::size_t kMaxSteps = 64;
+inline constexpr std::size_t kDefaultSteps = 16;
 inline constexpr std::size_t kMaxVoices = 16;
 
 // All sample memory is allocated statically, so wasm memory never grows.

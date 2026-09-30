@@ -1,12 +1,14 @@
-import '@fontsource/space-grotesk/500.css'
-import '@fontsource/space-grotesk/700.css'
-import '@fontsource/ibm-plex-mono/400.css'
-import '@fontsource/vt323/400.css'
+import '@fontsource/chakra-petch/latin-500.css'
+import '@fontsource/chakra-petch/latin-600.css'
+import '@fontsource/space-mono/latin-400.css'
+import '@fontsource/dotgothic16/latin-400.css'
 import './style.css'
+import { applyFinish, loadFinish } from './ui/finish'
 import { Studio } from './state/studio'
 import { mountStartScreen, mountStudio } from './ui/view'
 
 const root = document.querySelector<HTMLDivElement>('#app')!
+applyFinish(loadFinish())
 
 mountStartScreen(root, async () => {
   const studio = await Studio.start()

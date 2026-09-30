@@ -5,7 +5,7 @@
 
 export const BLOCK_SIZE = 128
 const NUM_PADS = 16
-const NUM_STEPS = 16
+const MAX_STEPS = 64
 const MAX_VOICES = 16
 const VOICE_SLOTS = MAX_VOICES + 8
 const FADE_STEP = 1 / 64
@@ -113,7 +113,9 @@ class Sampler {
 // --- Sequencer (engine/src/sequencer.hpp) ------------------------------------
 
 class Sequencer {
-  readonly pattern = new Uint16Array(NUM_PADS)
+  // One flag per pad and step (the C++ packs these into a 64-bit mask).
+  readonly pattern = new Uint8Array(NUM_PADS * MAX_STEPS)
+  length = 16
   private sampleRate = 48000
   private bpm = 90
   private speed = 1
@@ -144,7 +146,7 @@ class Sequencer {
     this.nextStep = 0
   }
   stepOn(pad: number, step: number): boolean {
-    return ((this.pattern[pad] >> step) & 1) === 1
+    return this.pattern[pad * MAX_STEPS + step] === 1
   }
 
   collect(now: number, frames: number): number {
@@ -153,7 +155,7 @@ class Sequencer {
     const end = now + frames
     for (let t = this.frameOf(this.nextStep); t < end && n < 4; t = this.frameOf(this.nextStep)) {
       this.hitOffsets[n] = t < now ? 0 : t - now
-      this.hitSteps[n] = this.nextStep % NUM_STEPS
+      this.hitSteps[n] = this.nextStep % this.length
       n++
       this.nextStep++
     }
@@ -424,8 +426,7 @@ export class JsEngine {
     this.sampler.trigger(pad, gain, this.padLengths[pad])
   }
   setStep(pad: number, step: number, on: boolean): void {
-    const bit = 1 << step
-    this.sequencer.pattern[pad] = on ? this.sequencer.pattern[pad] | bit : this.sequencer.pattern[pad] & ~bit
+    if (step < MAX_STEPS) this.sequencer.pattern[pad * MAX_STEPS + step] = on ? 1 : 0
   }
   setBpm(bpm: number): void {
     this.sequencer.setBpm(bpm, this.now)

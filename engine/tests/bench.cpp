@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
         e.pad_begin(p);
         std::generate_n(e.pad_data(p), 96000, noise);
         e.pad_commit(p, 96000);
-        for (std::size_t s = 0; s < kNumSteps; ++s) e.set_step(p, s, true);
+        for (std::size_t s = 0; s < kDefaultSteps; ++s) e.set_step(p, s, true);
     }
     // 60 s song, restarted whenever it ends.
     constexpr std::size_t kSongFrames = 60 * 48000;

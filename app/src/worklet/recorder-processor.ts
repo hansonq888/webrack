@@ -1,7 +1,8 @@
-// Captures the mic input and posts it to the UI thread in 4096-frame chunks
-// (about 85 ms), so recording never touches the engine's audio path.
+// Captures the mic input and posts it to the UI thread in 1024-frame chunks
+// (about 21 ms: fine-grained enough for sound-triggered start/stop and a live
+// meter), so recording never touches the engine's audio path.
 
-const CHUNK_FRAMES = 4096
+const CHUNK_FRAMES = 1024
 
 class RecorderProcessor extends AudioWorkletProcessor {
   private chunk = new Float32Array(CHUNK_FRAMES)
