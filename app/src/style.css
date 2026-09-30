@@ -81,8 +81,8 @@
   --r-lcd: 4px;
 
   /* Type */
-  --sans: 'Chakra Petch', system-ui, sans-serif;
-  --mono: 'Space Mono', ui-monospace, monospace;
+  --sans: 'Geist Sans', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
   --lcd: 'DotGothic16', ui-monospace, monospace;
 
   color-scheme: dark;
@@ -93,11 +93,11 @@
 
 :root[data-finish='indie'] {
   /* Teenage Engineering-style industrial: cool aluminum, graphite keys,
-     one hot orange, a black dot-matrix display. */
-  --room: #1f120a;
-  --room-glow: rgba(255, 120, 40, 0.28);
-  --room-tint: rgba(170, 70, 20, 0.22);
-  --vignette: rgba(0, 0, 0, 0.5);
+     one hot orange, a black dot-matrix display, shot on a light backdrop. */
+  --room: #d4d4d0;
+  --room-glow: rgba(255, 255, 255, 0.85);
+  --room-tint: rgba(255, 255, 255, 0.35);
+  --vignette: rgba(0, 0, 0, 0.16);
 
   --panel-hi: #e8e8e5;
   --panel: #dadad6;
@@ -294,6 +294,278 @@
   --r-lcd: 6px;
 }
 
+:root[data-finish='sunset'] {
+  /* Y2K pop under a midnight sun: a pink-to-orange sky, a glossy bubblegum
+     body, hot-pink pads, acid-lime Play and a lime-on-plum screen. */
+  --room: linear-gradient(170deg, #ff3fa4 0%, #ff6f7d 38%, #ff9a5a 70%, #ffc85c 100%);
+  --room-glow: rgba(255, 255, 255, 0.35);
+  --room-tint: rgba(255, 240, 120, 0.18);
+  --vignette: rgba(120, 0, 70, 0.25);
+
+  --panel-hi: #ffe6f2;
+  --panel: #ffd0e6;
+  --panel-lo: #f9b3d4;
+  --panel-edge: #d9739f;
+  --panel-sheen: rgba(255, 255, 255, 0.9);
+  --brush: rgba(255, 255, 255, 0.04);
+  --well: #f592c2;
+  --cheek-width: 0px;
+  --grille-hole: #c24d86;
+  --grille-rim: rgba(255, 255, 255, 0.7);
+
+  --ink: #6e0b45;
+  --ink-muted: rgba(110, 11, 69, 0.68);
+  --ink-faint: rgba(110, 11, 69, 0.3);
+
+  --cap-hi: #ffffff;
+  --cap: #fdeef5;
+  --cap-edge: #d99ab8;
+  --cap-sheen: rgba(255, 255, 255, 1);
+  --latched-hi: #ff5cb4;
+  --latched: #ff3fa4;
+  --latched-ink: #fff;
+
+  --pad-hi: #ff7cc6;
+  --pad: #ff4fae;
+  --pad-edge: #b41f6c;
+  --pad-sheen: rgba(255, 255, 255, 0.55);
+  --pad-ink: #fff;
+  --pad-hit-hi: #fff3fa;
+  --pad-hit: #ffc6e4;
+  --led-off: #b8266f;
+  --led-dim: #ff9fd2;
+
+  --accent: #c8ff3d;
+  --accent-glow: rgba(200, 255, 61, 0.7);
+  --primary-hi: #dcff6a;
+  --primary: #bff22a;
+  --primary-edge: #6d9400;
+  --primary-ink: #2a3a00;
+  --primary-glow: rgba(200, 255, 61, 0.55);
+  --secondary-hi: #ffffff;
+  --secondary: #fdeef5;
+  --secondary-edge: #d99ab8;
+  --secondary-ink: #6e0b45;
+  --red: #ff2d6f;
+  --red-glow: rgba(255, 45, 111, 0.6);
+
+  --lcd-bg-hi: #2a0a3a;
+  --lcd-bg: #19052a;
+  --lcd-bezel: #b41f6c;
+  --lcd-fg: #d4ff4a;
+  --lcd-dim: rgba(212, 255, 74, 0.13);
+  --lcd-glow: rgba(212, 255, 74, 0.55);
+  --lcd-scale: 1;
+
+  --r-device: 30px;
+  --r-well: 18px;
+  --r-pad: 14px;
+  --r-key: 999px;
+  --r-lcd: 14px;
+
+  --sans: 'Unbounded', 'Geist Sans', system-ui, sans-serif;
+}
+
+:root[data-finish='sunset'] body {
+  background-attachment: fixed;
+}
+
+:root[data-finish='sunset'] body::before {
+  display: none;
+}
+
+/* Wide Unbounded: pads, steps and the small labels keep Geist so they fit. */
+:root[data-finish='sunset'] :is(.pad, .step, .switch-label, .knob, .section-label, .start-sub) {
+  font-family: 'Geist Sans', system-ui, sans-serif;
+}
+
+:root[data-finish='sunset'] .step {
+  border-radius: 12px;
+}
+
+/* Unbounded runs wide: transport keys get smaller type and room at the sides. */
+:root:is([data-finish='sunset'], [data-finish='noir']) .key-transport {
+  padding-inline: 16px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* Lime is the accent, but it vanishes on pink paper: menu checks go hot pink. */
+:root[data-finish='sunset'] .menu .check {
+  color: #ff3fa4;
+}
+
+/* Pearly knobs with hot-pink pointers. */
+:root[data-finish='sunset'] .knob-cap {
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.9), transparent 55%),
+    repeating-conic-gradient(#f6dbe8 0 3deg, #fdf1f7 3deg 6deg);
+  box-shadow:
+    inset 0 -3px 5px rgba(180, 31, 108, 0.25),
+    inset 0 1px 1px #fff,
+    0 3px 0 #d99ab8,
+    0 6px 10px rgba(180, 31, 108, 0.3);
+}
+
+:root[data-finish='sunset'] .knob-cap::before {
+  background:
+    radial-gradient(circle at 38% 28%, #fff, transparent 50%),
+    radial-gradient(circle at 50% 40%, #fff7fb, #fbe3ef 70%, #f4cfe1);
+  box-shadow:
+    inset 0 1px 1px #fff,
+    inset 0 -2px 3px rgba(180, 31, 108, 0.18),
+    0 0 0 1px rgba(217, 115, 159, 0.5);
+}
+
+:root[data-finish='sunset'] .knob-pointer {
+  background: #ff3fa4;
+  box-shadow: none;
+}
+
+:root[data-finish='sketch'] {
+  /* A hand-drawn MPC on a yellow page: flat colors, thick ink outlines, hard
+     comic shadows, the classic blue-green LCD. */
+  --line: #1c1b19;
+  --room: #f2c230;
+  --room-glow: transparent;
+  --room-tint: transparent;
+  --vignette: transparent;
+
+  --panel-hi: #efebdd;
+  --panel: #efebdd;
+  --panel-lo: #e3dfd0;
+  --panel-edge: var(--line);
+  --panel-sheen: transparent;
+  --brush: transparent;
+  --well: #a9a8a3;
+  --cheek-width: 0px;
+  --grille-hole: var(--line);
+  --grille-rim: transparent;
+
+  --ink: #1c1b19;
+  --ink-muted: #5a5750;
+  --ink-faint: rgba(28, 27, 25, 0.35);
+
+  --cap-hi: #faf8f0;
+  --cap: #faf8f0;
+  --cap-edge: var(--line);
+  --cap-sheen: transparent;
+  --latched-hi: #3a3936;
+  --latched: #3a3936;
+  --latched-ink: #faf8f0;
+
+  --pad-hi: #5e5d5a;
+  --pad: #5e5d5a;
+  --pad-edge: var(--line);
+  --pad-sheen: transparent;
+  --pad-ink: #f4f2ea;
+  --led-off: #3a3936;
+
+  --accent: #e0453f;
+  --accent-glow: transparent;
+  --primary-hi: #e25a55;
+  --primary: #e25a55;
+  --primary-edge: var(--line);
+  --primary-ink: #fff;
+  --primary-glow: transparent;
+  --secondary-hi: #3a3936;
+  --secondary: #3a3936;
+  --secondary-edge: var(--line);
+  --secondary-ink: #faf8f0;
+  --red: #e0453f;
+  --red-glow: transparent;
+
+  --lcd-bg-hi: #bcd8e4;
+  --lcd-bg: #bcd8e4;
+  --lcd-bezel: var(--line);
+  --lcd-fg: #1f3440;
+  --lcd-dim: rgba(31, 52, 64, 0.18);
+  --lcd-glow: transparent;
+  --lcd-scale: 1;
+
+  --r-device: 18px;
+  --r-well: 10px;
+  --r-pad: 7px;
+  --r-key: 7px;
+  --r-lcd: 6px;
+
+  --sans: 'Geist Sans', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+  --lcd: 'Geist Mono', ui-monospace, monospace;
+}
+
+:root[data-finish='noir'] {
+  /* Black studio-archive look: pure black, white hairlines, spaced mono
+     type, a phosphor-green dither LCD, one chrome shimmer on Play. */
+  --hair: rgba(255, 255, 255, 0.82);
+  --room: #000;
+  --room-glow: rgba(255, 255, 255, 0.04);
+  --room-tint: transparent;
+  --vignette: transparent;
+
+  --panel-hi: #0a0a0a;
+  --panel: #070707;
+  --panel-lo: #040404;
+  --panel-edge: rgba(255, 255, 255, 0.22);
+  --panel-sheen: transparent;
+  --brush: transparent;
+  --well: #000;
+  --cheek-width: 0px;
+  --grille-hole: rgba(255, 255, 255, 0.55);
+  --grille-rim: transparent;
+
+  --ink: #f4f4f2;
+  --ink-muted: rgba(244, 244, 242, 0.58);
+  --ink-faint: rgba(244, 244, 242, 0.28);
+
+  --cap-hi: #0c0c0c;
+  --cap: #0c0c0c;
+  --cap-edge: #000;
+  --cap-sheen: transparent;
+  --latched-hi: #f4f4f2;
+  --latched: #f4f4f2;
+  --latched-ink: #000;
+
+  --pad-hi: #0d0d0d;
+  --pad: #0a0a0a;
+  --pad-edge: #000;
+  --pad-sheen: transparent;
+  --pad-ink: rgba(244, 244, 242, 0.7);
+  --led-off: #1c1c1c;
+
+  --accent: #f4f4f2;
+  --accent-glow: rgba(255, 255, 255, 0.35);
+  --primary-hi: #f4f4f2;
+  --primary: #f4f4f2;
+  --primary-edge: #000;
+  --primary-ink: #000;
+  --primary-glow: rgba(255, 255, 255, 0.3);
+  --secondary-hi: #0c0c0c;
+  --secondary: #0c0c0c;
+  --secondary-edge: #000;
+  --secondary-ink: #f4f4f2;
+  --red: #ff3b30;
+  --red-glow: rgba(255, 59, 48, 0.5);
+
+  --lcd-bg-hi: #030803;
+  --lcd-bg: #020502;
+  --lcd-bezel: #000;
+  --lcd-fg: #8dff5c;
+  --lcd-dim: rgba(141, 255, 92, 0.1);
+  --lcd-glow: rgba(141, 255, 92, 0.45);
+  --lcd-scale: 1;
+
+  --r-device: 26px;
+  --r-well: 16px;
+  --r-pad: 12px;
+  --r-key: 999px;
+  --r-lcd: 10px;
+
+  --sans: 'Unbounded', 'Geist Sans', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+  --lcd: 'Geist Mono', ui-monospace, monospace;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -338,6 +610,25 @@ body::after {
   justify-content: center;
 }
 
+/* Song mode: the live waveform as a line across the window, behind the device. */
+.backdrop-scope {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms;
+}
+
+#app:has(.device[data-mode='song']) .backdrop-scope {
+  opacity: 1;
+}
+
+#app .device {
+  z-index: 1;
+}
+
 button,
 a.key,
 input {
@@ -353,6 +644,7 @@ input {
 /* ---- Body --------------------------------------------------------------------- */
 
 .device {
+  container: device / inline-size;
   position: relative;
   width: 100%;
   max-width: 460px;
@@ -377,6 +669,9 @@ input {
 
 /* Corner screws. */
 .screws i {
+  /* Inset grows with the corner radius, so a screw stays about 6px inside the
+     curve on round-cornered themes (8px minimum for the square ones). */
+  --screw-inset: max(8px, calc(var(--r-device) * 0.3 + 2.5px));
   position: absolute;
   z-index: 1;
   width: 11px;
@@ -392,21 +687,21 @@ input {
 }
 
 .screws i:nth-child(1) {
-  top: 8px;
-  left: calc(var(--cheek-width) + 8px);
+  top: var(--screw-inset);
+  left: calc(var(--cheek-width) + var(--screw-inset));
 }
 .screws i:nth-child(2) {
-  top: 8px;
-  right: calc(var(--cheek-width) + 8px);
+  top: var(--screw-inset);
+  right: calc(var(--cheek-width) + var(--screw-inset));
 }
 .screws i:nth-child(3) {
-  bottom: 8px;
-  left: calc(var(--cheek-width) + 8px);
+  bottom: var(--screw-inset);
+  left: calc(var(--cheek-width) + var(--screw-inset));
   transform: rotate(60deg);
 }
 .screws i:nth-child(4) {
-  bottom: 8px;
-  right: calc(var(--cheek-width) + 8px);
+  bottom: var(--screw-inset);
+  right: calc(var(--cheek-width) + var(--screw-inset));
   transform: rotate(-30deg);
 }
 
@@ -434,10 +729,13 @@ input {
   border-radius: 0 var(--r-device) var(--r-device) 0;
 }
 
+/* Header: brand on the left, the grille centered, and one cluster on the
+   right (status lamps, theme, export). */
 .device-top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
+  gap: 12px 20px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--ink-faint);
 }
@@ -448,13 +746,17 @@ input {
   gap: 4px;
 }
 
+/* Wordmark: heavy lowercase Geist on every theme. */
 .wordmark {
-  font-weight: 600;
-  font-size: 1.15rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  line-height: 1;
+  color: inherit;
+  text-decoration: none;
+  font-family: 'Geist Sans', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 1.7rem;
+  letter-spacing: -0.045em;
+  line-height: 0.9;
 }
+
 
 .model,
 .section-label,
@@ -474,12 +776,178 @@ input {
 }
 
 /* Status lamps. */
+/* Settings: a key with a gear that opens a dropdown menu. */
+.settings-wrap {
+  position: relative;
+}
+
+/* Icon-only key (the settings gear). */
+.key-icon {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+
+.gear {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.gear-hole {
+  fill: var(--face, var(--panel));
+}
+
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 250px;
+  padding: 6px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 var(--panel-sheen),
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 14px 32px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-label {
+  padding: 6px 10px 4px;
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.menu hr {
+  width: 100%;
+  margin: 5px 0;
+  border: 0;
+  border-top: 1px solid var(--ink-faint);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: left;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  outline: none;
+}
+
+.menu-item span {
+  flex: 1;
+}
+
+.chip {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.chip-empty {
+  box-shadow: none;
+}
+
+.check {
+  visibility: hidden;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.menu-item[aria-checked='true'] .check {
+  visibility: visible;
+}
+
+.menu-danger[data-armed] {
+  color: var(--red);
+}
+
+.menu-foot {
+  padding: 8px 10px 4px;
+  margin-top: 4px;
+  border-top: 1px solid var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  color: var(--ink-muted);
+}
+
+/* Export (studio header, top right) and its result card. */
+.export-wrap {
+  position: relative;
+}
+
+.export-wrap #export {
+  gap: 6px;
+}
+
+.export-pop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 12px);
+  right: 0;
+  width: min(300px, calc(100vw - 48px));
+  padding: 14px 14px 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+  box-shadow:
+    inset 0 1px 0 var(--panel-sheen),
+    0 12px 30px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.export-pop .export-file {
+  padding-right: 20px;
+}
+
 /* Speaker grille: a field of drilled holes. */
 .grille {
-  flex: 1;
-  max-width: 133px;
+  justify-self: center;
+  width: 133px;
   height: 28px; /* four whole rows of 7px holes */
-  margin: 0 16px;
+  margin: 0;
   background: radial-gradient(
       circle at 50% 42%,
       var(--grille-hole, rgba(0, 0, 0, 0.55)) 1.4px,
@@ -493,6 +961,12 @@ input {
 .lamps {
   display: flex;
   gap: 14px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .lamp-group {
@@ -576,8 +1050,7 @@ input {
 
 .machine,
 .machine > section,
-.pad-block,
-.m-out {
+.pad-block {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -641,6 +1114,11 @@ input {
 
 .lcd-row b {
   font-weight: 400;
+}
+
+.lcd-status {
+  justify-content: flex-start;
+  opacity: 0.7;
 }
 
 .lcd-msg {
@@ -712,18 +1190,6 @@ input {
   line-height: 1;
   text-align: center;
   letter-spacing: 0.12em;
-}
-
-/* Under the display: source keys and a compact tempo fader. */
-.screen-controls {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 10px;
-}
-
-.screen-controls .key {
-  min-width: 62px;
 }
 
 /* Step sequencer header: label, then pattern length and bar keys. */
@@ -835,8 +1301,8 @@ input {
   line-height: 1.2;
   letter-spacing: 0.08em;
   text-align: center;
-  color: #ff3b2c;
-  text-shadow: 0 0 8px rgba(255, 50, 30, 0.7);
+  color: #ff8a3a;
+  text-shadow: 0 0 8px rgba(255, 130, 50, 0.7);
 }
 
 .tempo-led.tap {
@@ -845,8 +1311,8 @@ input {
 
 @keyframes tap-flash {
   0% {
-    color: #ffd2c8;
-    text-shadow: 0 0 14px rgba(255, 90, 60, 1);
+    color: #ffe2c8;
+    text-shadow: 0 0 14px rgba(255, 150, 60, 1);
   }
 }
 
@@ -865,12 +1331,14 @@ input {
 }
 
 .knob-compact .knob-cap::before {
-  inset: 5px;
+  inset: 4px;
 }
 
 .knob-compact .knob-pointer {
-  top: 2px;
-  height: 10px;
+  top: 4px;
+  width: 2px;
+  margin-left: -1px;
+  height: calc(50% - 4px);
 }
 
 .knob-compact .knob-label,
@@ -988,11 +1456,31 @@ input {
   font-size: 0.8rem;
 }
 
+.start-choices {
+  display: grid;
+  gap: 12px;
+}
+
 .key-start {
   --d0: 5px;
-  min-height: 58px;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 70px;
+  padding: 10px 16px;
+}
+
+.start-title {
   font-size: 0.95rem;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.2em;
+}
+
+.start-sub {
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  opacity: 0.8;
 }
 
 .key-play {
@@ -1160,13 +1648,24 @@ input {
   box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
 }
 
-.pad.has-steps .pad-led {
-  background: var(--led-dim);
+/* Each row's LEDs have their own color (drums, percussion, bass, chords);
+   a pad's LED lights when it has steps in the pattern. */
+.pad:nth-child(-n + 4) {
+  --led: #ff4b3a;
+}
+.pad:nth-child(n + 5):nth-child(-n + 8) {
+  --led: #ffa53a;
+}
+.pad:nth-child(n + 9):nth-child(-n + 12) {
+  --led: #6fe07f;
+}
+.pad:nth-child(n + 13) {
+  --led: #5bb8ff;
 }
 
-.pad.selected .pad-led {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
+.pad.has-steps .pad-led {
+  background: var(--led);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--led) 70%, transparent);
 }
 
 .pad.selected {
@@ -1177,19 +1676,36 @@ input {
   --d: 1px;
 }
 
-/* Struck: the pad lights up and decays. */
-.pad.hit {
-  animation: pad-hit 240ms ease-out;
+/* A pad that plays lights up in its row's color and fades out, like a
+   backlit rubber pad. Tapped pads also press down. */
+.pad.fire {
+  animation: pad-light 340ms ease-out;
 }
 
-@keyframes pad-hit {
+.pad.hit {
+  animation: pad-press 340ms ease-out;
+}
+
+@keyframes pad-light {
   0% {
-    transform: translateY(calc(var(--d0) - 1px));
-    background: linear-gradient(170deg, var(--pad-hit-hi), var(--pad-hit));
+    color: #fff;
+    background: linear-gradient(170deg, color-mix(in srgb, var(--led) 72%, white), color-mix(in srgb, var(--led) 68%, var(--pad)));
     box-shadow:
-      inset 0 1px 0 var(--pad-sheen),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 var(--d) 0 color-mix(in srgb, var(--led) 45%, var(--edge)),
+      0 0 28px color-mix(in srgb, var(--led) 70%, transparent);
+  }
+}
+
+@keyframes pad-press {
+  0% {
+    color: #fff;
+    transform: translateY(calc(var(--d0) - 1px));
+    background: linear-gradient(170deg, color-mix(in srgb, var(--led) 72%, white), color-mix(in srgb, var(--led) 68%, var(--pad)));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
       0 1px 0 var(--edge),
-      0 0 26px color-mix(in srgb, var(--pad-hit) 55%, transparent);
+      0 0 28px color-mix(in srgb, var(--led) 70%, transparent);
   }
 }
 
@@ -1218,14 +1734,22 @@ input {
   }
 }
 
-:root[data-finish='indie'] .pad.hit {
-  color: #fff;
-}
-
 .pad.drop-target,
 .drop.drop-target {
   outline: 1px dashed var(--accent);
   outline-offset: 2px;
+}
+
+.pad-tools .key {
+  --face-hi: var(--pad-hi);
+  --face: var(--pad);
+  --edge: var(--pad-edge);
+  --sheen: var(--pad-sheen);
+  color: var(--pad-ink);
+}
+
+.pad-tools .key:disabled {
+  opacity: 0.35;
 }
 
 .pad-tools {
@@ -1483,15 +2007,15 @@ input {
 
 
 .song-screen .viz {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 12px;
-  width: calc(100% - 28px);
-  height: calc(100% - 64px);
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 100px;
+  margin-top: 12px;
 }
 
 .song-meta {
+  order: -1; /* the title sits above the spectrum */
   position: relative;
   z-index: 1;
   display: flex;
@@ -1502,6 +2026,7 @@ input {
 }
 
 .song-screen b {
+  color: var(--lcd-fg);
   font-weight: 400;
   font-size: 1.05rem;
   letter-spacing: 0.04em;
@@ -1581,7 +2106,8 @@ input {
   position: relative;
   height: 50px;
   padding: 0 var(--inset);
-  border-radius: var(--r-key);
+  /* Capped so pill-key themes don't round the waveform's ends off. */
+  border-radius: min(var(--r-key), 12px);
   background: var(--well);
   box-shadow:
     inset 0 4px 10px rgba(0, 0, 0, 0.75),
@@ -1623,18 +2149,181 @@ input {
 
 /* ---- Vibe knobs ---------------------------------------------------------------------------- */
 
-.presets {
+/* ---- Control panel: speed encoder, switches, knob boxes -------------------- */
+
+/* One row of switches: source, effects on/bypass, and the vibe preset. */
+.panel-switches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 14px 10px;
+}
+
+.panel-switches .vibe-rule {
+  display: none;
+}
+
+/* A centered rule: line, label, line. */
+.vibe-rule::before {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ink-faint);
+}
+
+.switch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.switch-label {
+  font-weight: 600;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Two-segment rocker: the pressed side sits in (latched). */
+.rocker {
+  display: inline-flex;
+}
+
+.rocker .key {
+  min-width: 58px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 0.6rem;
+}
+
+.rocker .key:first-child {
+  border-radius: var(--r-key) 0 0 var(--r-key);
+}
+
+.rocker .key:last-child {
+  border-radius: 0 var(--r-key) var(--r-key) 0;
+}
+
+/* Slide switch (the vibe preset): a thumb that slides in a recessed track. */
+.slide-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.slide-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.slide-track {
+  position: relative;
+  width: 58px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--well);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.7),
+    0 1px 0 var(--panel-sheen);
+  transition: background 150ms;
+}
+
+.slide-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 30px;
+  height: 20px; /* + its 2px edge: an even 2px gap above and below */
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)) center / 1px 10px no-repeat,
+    linear-gradient(180deg, var(--cap-hi), var(--cap));
+  box-shadow:
+    inset 0 1px 0 var(--cap-sheen),
+    0 2px 0 var(--cap-edge),
+    0 3px 5px rgba(0, 0, 0, 0.4);
+  transition: transform 150ms;
+}
+
+.slide-switch input:checked + .slide-track {
+  background: color-mix(in srgb, var(--accent) 65%, var(--well));
+}
+
+.slide-switch input:checked + .slide-track .slide-thumb {
+  transform: translateX(24px);
+}
+
+.slide-switch input:focus-visible + .slide-track {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.knob-boxes {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.knob-box {
+  margin: 0;
+  min-width: 0;
+  padding: 10px 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 10px;
+}
+
+.knob-box legend {
+  margin: 0 auto;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
 .knobs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px 6px;
-  margin-top: 12px; /* clear of the preset keys' shadows */
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 2px;
 }
+
+/* The speed knob: regular size, inside a ring of LEDs that light to the value. */
+.knob-encoder .knob-dial {
+  width: 74px;
+  height: 74px;
+}
+
+.knob-encoder .knob-cap {
+  width: 48px;
+  height: 48px;
+}
+
+.knob-leds i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  transform: rotate(var(--a)) translateY(-33px);
+}
+
+.knob-leds i.on {
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent-glow);
+}
+
+
 
 .knob {
   display: flex;
@@ -1664,14 +2353,16 @@ input {
 }
 
 /* Knurled black skirt with a colored cap on top. */
+/* An all-black knurled knob: a fine grippy skirt, a matte top face, and a
+   white pointer line from the center to the edge. */
 .knob-cap {
   position: relative;
   width: 44px;
   height: 44px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.2), transparent 55%),
-    repeating-conic-gradient(#1f201e 0 6deg, #0d0e0c 6deg 12deg);
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.16), transparent 55%),
+    repeating-conic-gradient(#2a2a2a 0 3deg, #111 3deg 6deg);
   box-shadow:
     inset 0 -3px 5px rgba(0, 0, 0, 0.5),
     inset 0 1px 1px rgba(255, 255, 255, 0.18),
@@ -1683,103 +2374,35 @@ input {
 .knob-cap::before {
   content: '';
   position: absolute;
-  inset: 7px;
+  inset: 5px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.7), transparent 28%),
-    radial-gradient(circle at 40% 30%, var(--cap-light), var(--cap-color) 60%, var(--cap-dark));
+    radial-gradient(circle at 38% 28%, rgba(255, 255, 255, 0.1), transparent 45%),
+    radial-gradient(circle at 50% 40%, #333, #1c1c1c 70%, #141414);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.3),
-    0 1px 2px rgba(0, 0, 0, 0.5);
+    inset 0 1px 1px rgba(255, 255, 255, 0.14),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 .knob-pointer {
   position: absolute;
-  top: 3px;
+  top: 5px;
   left: 50%;
-  width: 2px;
-  height: 14px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: #f4ecd9;
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  width: 3px;
+  height: calc(50% - 5px); /* from the edge of the top face to the center */
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #f5f5f2;
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.25);
   z-index: 1;
-}
-
-/* Console: muted caps. */
-.cap-yellow {
-  --cap-light: #d8b467;
-  --cap-color: #b08632;
-  --cap-dark: #6b4f19;
-}
-.cap-red {
-  --cap-light: #c46b5f;
-  --cap-color: #9b3f33;
-  --cap-dark: #5a221b;
-}
-.cap-blue {
-  --cap-light: #7c9ab9;
-  --cap-color: #4a6b8d;
-  --cap-dark: #273c52;
-}
-.cap-green {
-  --cap-light: #87a98a;
-  --cap-color: #58805c;
-  --cap-dark: #2f4832;
-}
-.cap-cream {
-  --cap-light: #e3dbc8;
-  --cap-color: #bdb39c;
-  --cap-dark: #7a725f;
-}
-
-/* Putty: saturated caps. */
-:root[data-finish='putty'] .cap-yellow {
-  --cap-light: #ffe27a;
-  --cap-color: #f0c02e;
-  --cap-dark: #b98b12;
-}
-:root[data-finish='putty'] .cap-red {
-  --cap-light: #ff8b78;
-  --cap-color: #dd3f2d;
-  --cap-dark: #8f2419;
-}
-:root[data-finish='putty'] .cap-blue {
-  --cap-light: #86b4f4;
-  --cap-color: #3c7ed6;
-  --cap-dark: #22538f;
-}
-:root[data-finish='putty'] .cap-green {
-  --cap-light: #86d59c;
-  --cap-color: #3e9c59;
-  --cap-dark: #235e36;
-}
-
-:root[data-finish='indie'] .cap-yellow,
-:root[data-finish='indie'] .cap-red {
-  --cap-light: #ff9a6b;
-  --cap-color: #ff5b1f;
-  --cap-dark: #b23a0a;
-}
-:root[data-finish='indie'] .cap-blue,
-:root[data-finish='indie'] .cap-cream {
-  --cap-light: #ffffff;
-  --cap-color: #e2e2de;
-  --cap-dark: #9e9e99;
-}
-:root[data-finish='indie'] .cap-green {
-  --cap-light: #5a5a5a;
-  --cap-color: #333333;
-  --cap-dark: #151515;
-}
-:root[data-finish='indie'] .knob-cap {
-  background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.22), transparent 55%),
-    repeating-conic-gradient(#2c2c2c 0 6deg, #1b1b1b 6deg 12deg);
+  /* Turns about the knob's center (the pointer's bottom end). */
+  transform-origin: 50% 100%;
+  transform: rotate(var(--angle, 0deg));
 }
 
 .knob.active .knob-cap::before {
-  filter: brightness(1.12);
+  filter: brightness(1.25);
 }
 
 .knob-label {
@@ -1856,10 +2479,10 @@ input {
     display: grid;
     grid-template-columns: 1fr 1.1fr;
     grid-template-areas:
-      'screen pads'
-      'qlink  pads'
-      'out    transport'
-      'seq    seq';
+      'screen    pads'
+      'transport pads'
+      'qlink     pads'
+      'seq       seq';
     column-gap: 36px;
     row-gap: 18px;
     align-items: start;
@@ -1874,21 +2497,17 @@ input {
   .m-qlink {
     grid-area: qlink;
   }
-  .m-out {
-    grid-area: out;
+  .m-transport {
+    grid-area: transport;
   }
   .m-seq {
     grid-area: seq;
-  }
-  .m-transport {
-    grid-area: transport;
   }
 
   .device[data-mode='song'] .machine {
     grid-template-areas:
       'screen pads'
-      'qlink  pads'
-      'out    .';
+      'qlink  pads';
   }
 
   .steps {
@@ -1921,6 +2540,14 @@ input {
     grid-template-columns: repeat(3, 1fr);
   }
 
+  .knob-boxes {
+    grid-template-columns: 1fr;
+  }
+
+  .knob-box .knobs {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
   .pad-target {
     grid-column: 1 / -1;
     max-width: none;
@@ -1941,6 +2568,11 @@ input {
   }
 }
 
+/* Settings → "Show key letters on pads" off. */
+:root[data-key-letters='off'] .pad-key {
+  display: none;
+}
+
 /* Hide the pads' key letters where they'd crowd the names (a narrow pad
    grid) or where there's no keyboard to use them (touch-only devices). */
 @container (max-width: 420px) {
@@ -1953,6 +2585,316 @@ input {
   .pad-key {
     display: none;
   }
+}
+
+/* A narrow device (phones, and the start screen): brand on the left, and
+   on the right the lamps and settings gear, with Export wrapping below them
+   inside the right column. */
+@container device (max-width: 620px) {
+  .device-top {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+
+  .device-top .grille {
+    display: none;
+  }
+
+  .header-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 190px;
+    gap: 10px 12px;
+  }
+
+  .device-top .model {
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+}
+
+/* ---- Sketch theme: outlines instead of bevels ------------------------------- */
+
+:root[data-finish='sketch'] body::before,
+:root[data-finish='sketch'] body::after,
+:root[data-finish='sketch'] .lcd::after,
+:root[data-finish='sketch'] .song-screen::after {
+  display: none;
+}
+
+:root[data-finish='sketch'] .device {
+  border: 3px solid var(--line);
+  background: var(--panel);
+  box-shadow: 8px 10px 0 var(--line);
+}
+
+/* Keys, pads and steps: flat faces, ink outlines, a solid ink side wall. */
+:root[data-finish='sketch'] :is(.key, .pad, .step) {
+  border: 2.5px solid var(--line);
+  background: var(--face);
+  box-shadow:
+    var(--ring),
+    0 var(--d) 0 var(--line);
+}
+
+:root[data-finish='sketch'] .key[aria-pressed='true'],
+:root[data-finish='sketch'] .key[aria-selected='true'] {
+  --ring: 0 0 0 0 transparent;
+}
+
+:root[data-finish='sketch'] .step {
+  background: var(--face);
+}
+
+:root[data-finish='sketch'] .step::after {
+  height: 3px;
+  opacity: 1;
+}
+
+:root[data-finish='sketch'] :is(.lcd, .song-screen, .pad-target, .tempo-led) {
+  border: 3px solid var(--line);
+  background: var(--lcd-bg);
+  box-shadow: none;
+  text-shadow: none;
+}
+
+:root[data-finish='sketch'] .tempo-led {
+  color: var(--lcd-fg);
+}
+
+:root[data-finish='sketch'] :is(.pad-well, .tempo, .song-bar, .slide-track) {
+  border: 2.5px solid var(--line);
+  box-shadow: none;
+}
+
+:root[data-finish='sketch'] .pad-well {
+  background: var(--well);
+}
+
+/* The slide switch, redrawn to fit its outline: an inked track and a flat
+   thumb that sits inside it, with a single grip line. */
+:root[data-finish='sketch'] .slide-track {
+  height: 28px;
+  background: #d9d5c6;
+}
+
+:root[data-finish='sketch'] .slide-switch input:checked + .slide-track {
+  background: var(--accent);
+}
+
+:root[data-finish='sketch'] .slide-thumb {
+  top: 1px;
+  left: 1px;
+  width: 28px;
+  height: 21px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(var(--line), var(--line)) center / 2px 9px no-repeat, #faf8f0;
+  box-shadow: none;
+}
+
+:root[data-finish='sketch'] .tempo {
+  background: #3a3936;
+}
+
+:root[data-finish='sketch'] .knob-cap {
+  border: 2.5px solid var(--line);
+  background: #2c2b29;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+:root[data-finish='sketch'] .knob-cap::before {
+  background: #3d3c39;
+  box-shadow: none;
+}
+
+:root[data-finish='sketch'] :is(.pad-led, .lamp, .step i, .rec-dot) {
+  box-shadow: 0 0 0 1.5px var(--line);
+}
+
+:root[data-finish='sketch'] .pad.has-steps .pad-led,
+:root[data-finish='sketch'] .step.on i {
+  box-shadow: 0 0 0 1.5px var(--line);
+}
+
+:root[data-finish='sketch'] .knob-box {
+  border: 2px solid var(--line);
+}
+
+:root[data-finish='sketch'] .screws i {
+  background: #d8d4c6;
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+:root[data-finish='sketch'] :is(.menu, .export-pop) {
+  border: 2.5px solid var(--line);
+  background: var(--panel);
+  box-shadow: 5px 6px 0 var(--line);
+}
+
+/* Lit pads: flat color and an outline, no glow. */
+:root[data-finish='sketch'] .pad.fire,
+:root[data-finish='sketch'] .pad.hit {
+  animation-name: pad-light-flat;
+}
+
+@keyframes pad-light-flat {
+  0% {
+    color: var(--line);
+    background: var(--led);
+  }
+}
+
+/* ---- Noir theme: hairlines on black ---------------------------------------- */
+
+:root[data-finish='noir'] body::after {
+  display: none;
+}
+
+:root[data-finish='noir'] .device {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--panel);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.9);
+}
+
+:root[data-finish='noir'] :is(.key, .pad, .step) {
+  border: 1px solid var(--hair);
+  background: var(--face);
+  box-shadow:
+    var(--ring),
+    0 var(--d) 0 #000;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+:root[data-finish='noir'] :is(.pad, .step) {
+  border-color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.02em;
+}
+
+/* Unbounded is wide: pads and the small labels keep the narrow mono so
+   they fit; Unbounded is for keys and headings. */
+:root[data-finish='noir'] .pad {
+  font-family: var(--mono);
+  text-transform: none;
+}
+
+:root[data-finish='noir'] :is(.switch-label, .knob, .section-label, .start-sub) {
+  font-family: var(--mono);
+}
+
+:root[data-finish='noir'] :is(.key, .start-pitch) {
+  font-weight: 500;
+}
+
+/* Steps stay rounded squares (pill keys would make them circles, and the
+   group underline would cut across the outline). */
+:root[data-finish='noir'] .step {
+  border-radius: 12px;
+}
+
+:root[data-finish='noir'] .label,
+:root[data-finish='noir'] .knob-label,
+:root[data-finish='noir'] .menu-label {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+
+/* The green dot-matrix LCD: a dither screen over the phosphor. */
+:root[data-finish='noir'] :is(.lcd, .song-screen) {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background:
+    radial-gradient(circle, rgba(141, 255, 92, 0.07) 0.6px, transparent 1px) 0 0 / 3px 3px,
+    var(--lcd-bg);
+  box-shadow: inset 0 0 30px rgba(141, 255, 92, 0.06);
+}
+
+:root[data-finish='noir'] :is(.pad-target, .tempo-led) {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  box-shadow: none;
+}
+
+:root[data-finish='noir'] :is(.pad-well, .tempo, .song-bar, .slide-track, .knob-box) {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #000;
+  box-shadow: none;
+}
+
+:root[data-finish='noir'] .slide-thumb {
+  top: 2px;
+  left: 2px;
+  height: 20px;
+  border: 1px solid var(--hair);
+  background: #000;
+  box-shadow: none;
+}
+
+:root[data-finish='noir'] .slide-switch input:checked + .slide-track {
+  background: #f4f4f2;
+}
+
+/* Rockers become one segmented pill: a hairline track, with the chosen side
+   as a white pill inside it. */
+:root[data-finish='noir'] .rocker {
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+}
+
+:root[data-finish='noir'] .rocker .key {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  transform: none;
+}
+
+:root[data-finish='noir'] .rocker .key:not([aria-pressed='true']) {
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+:root[data-finish='noir'] .rocker .key:not([aria-pressed='true']):hover {
+  color: var(--ink);
+}
+
+:root[data-finish='noir'] .knob-cap {
+  border: 1px solid var(--hair);
+  background: #000;
+  box-shadow: none;
+}
+
+:root[data-finish='noir'] .knob-cap::before {
+  background: #0b0b0b;
+  box-shadow: none;
+}
+
+:root[data-finish='noir'] .screws i {
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+:root[data-finish='noir'] :is(.menu, .export-pop) {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: #050505;
+}
+
+/* Play gets the one chrome moment: an iridescent rim. */
+:root[data-finish='noir'] #play {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--face), var(--face)) padding-box,
+    linear-gradient(120deg, #ff6a3d, #ffd23d, #6affb0, #3db8ff, #b36aff, #ff6a3d) border-box;
+  border-width: 1.5px;
+}
+
+/* Pads light pure white. */
+:root[data-finish='noir'] .pad {
+  --led: #f4f4f2;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -14,12 +14,16 @@ export const STEP_COUNTS = [16, 32, 64] as const
 export type StepCount = (typeof STEP_COUNTS)[number]
 export const EXPORT_LOOPS = 4
 const EXPORT_TAIL_SECONDS = 3
-const MASTER_GAIN = 0.45
+const MASTER_GAIN = 0.45 // engine gain at the default level
+export const DEFAULT_LEVEL = 0.8
 
 export type Mode = 'beat' | 'song'
 
 export interface Vibe {
   speed: number // 0.5–1.0
+  filter: number // -1 low-pass .. 0 off .. 1 high-pass
+  drive: number // 0–1
+  width: number // 0 mono .. 1 as is .. 1.5
   size: number // 0–1
   damping: number // 0–1
   preDelayMs: number // 0–200
@@ -29,9 +33,24 @@ export interface Vibe {
   high: number
 }
 
-export const FLAT_VIBE: Vibe = { speed: 1, size: 0.7, damping: 0.5, preDelayMs: 20, mix: 0.15, low: 0, mid: 0, high: 0 }
+export const FLAT_VIBE: Vibe = {
+  speed: 1,
+  filter: 0,
+  drive: 0,
+  width: 1,
+  size: 0.7,
+  damping: 0.5,
+  preDelayMs: 20,
+  mix: 0.15,
+  low: 0,
+  mid: 0,
+  high: 0,
+}
 export const SLOWED_REVERB: Vibe = {
   speed: 0.8,
+  filter: -0.12, // a touch of low-pass warmth
+  drive: 0.15,
+  width: 1.2,
   size: 0.9,
   damping: 0.6,
   preDelayMs: 40,
@@ -90,6 +109,7 @@ interface SavedPad {
   data: Float32Array
 }
 interface SavedSession {
+  level?: number
   pattern: boolean[][]
   stepCount?: StepCount
   bpm: number
@@ -109,6 +129,10 @@ export class Studio {
   bpm = DEMO_BPM
   playing = false
   vibe: Vibe = { ...FLAT_VIBE }
+  /** Master level, 0-1 (0.8 = unity). Not part of the vibe presets. */
+  level = DEFAULT_LEVEL
+  /** Reverb and EQ bypassed (speed stays): an instant A/B of the vibe. */
+  fxBypassed = false
   song: Song | null = null
   recording: Recording | null = null
   recordingPad = 0
@@ -251,6 +275,32 @@ export class Studio {
     this.changed()
   }
 
+  /** Back to the demo: kit sounds, pattern, tempo, length, vibe and level. */
+  async resetAll(): Promise<void> {
+    this.engine.send([Op.StopAll, 0, 0, 0])
+    this.playing = false
+    this.fxBypassed = false
+    this.pads = Array.from({ length: NUM_PADS }, (_, i) => this.kitPad(i))
+    await Promise.all(this.pads.map((p, i) => this.engine.loadPad(i, p.data)))
+    this.pattern = Array.from({ length: NUM_PADS }, () => Array(MAX_STEPS).fill(false))
+    for (const [pad, steps] of Object.entries(DEMO_PATTERN)) for (const s of steps) this.pattern[Number(pad)][s] = true
+    this.stepCount = 16
+    this.bpm = DEMO_BPM
+    this.vibe = { ...FLAT_VIBE }
+    this.level = DEFAULT_LEVEL
+    this.selected = 0
+    const commands: Command[] = [
+      [Op.ClearPattern, 0, 0, 0],
+      [Op.PatternLength, 16, 0, 0],
+      [Op.Bpm, 0, 0, this.bpm],
+      [Op.MasterGain, 0, 0, masterGain(this.level)],
+      ...vibeCommands(this.vibe),
+    ]
+    this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
+    await this.engine.applyNow(commands)
+    this.changed()
+  }
+
   /** Stops the beat and the song, fades every pad, and cuts the reverb tail. */
   stopAll(): void {
     this.playing = false
@@ -269,9 +319,17 @@ export class Studio {
   }
 
   /** Transport play: starts the beat from step 1 (restarting if running), or the song. */
+  /**
+   * Transport play: first silences everything still sounding (ringing pads,
+   * the song, the reverb tail), then starts the beat from step 1, or resumes
+   * the song. The engine does both in the same block and the new downbeat
+   * keeps its attack.
+   */
   play(): void {
+    if (this.mode === 'song' && !this.song) return
+    this.engine.send([Op.StopAll, 0, 0, 0])
     if (this.mode === 'song') {
-      if (this.song) this.engine.setSongPlaying(true)
+      this.engine.setSongPlaying(true)
     } else {
       this.playing = true
       this.engine.setPlaying(true)
@@ -279,30 +337,47 @@ export class Studio {
     this.changed(false)
   }
 
+  /** Space bar / song key: play (with the clean start above) or stop. */
   togglePlay(): void {
-    if (this.mode === 'song') {
-      if (!this.song) return
-      const status = this.engine.status()
-      this.engine.setSongPlaying(!status.songPlaying)
-    } else {
-      this.playing = !this.playing
-      this.engine.setPlaying(this.playing)
-    }
-    this.changed(false)
+    const running = this.mode === 'song' ? this.engine.status().songPlaying : this.playing
+    if (running) this.stop()
+    else this.play()
   }
 
   // --- Vibe ---------------------------------------------------------------
 
   setVibe(key: keyof Vibe, value: number): void {
     this.vibe[key] = value
-    for (const command of vibeCommands({ [key]: value })) this.engine.send(command)
+    for (const command of vibeCommands(this.heardVibe(), [key])) this.engine.send(command)
     this.changed()
   }
 
   applyVibe(vibe: Vibe): void {
     this.vibe = { ...vibe }
-    for (const command of vibeCommands(vibe)) this.engine.send(command)
+    for (const command of vibeCommands(this.heardVibe())) this.engine.send(command)
     this.changed()
+  }
+
+  /** Whether the current vibe is the slowed + reverb preset. */
+  get slowed(): boolean {
+    return (Object.keys(SLOWED_REVERB) as (keyof Vibe)[]).every((k) => Math.abs(this.vibe[k] - SLOWED_REVERB[k]) < 1e-6)
+  }
+
+  setFxBypassed(bypassed: boolean): void {
+    this.fxBypassed = bypassed
+    for (const command of vibeCommands(this.heardVibe())) this.engine.send(command)
+    this.changed()
+  }
+
+  setLevel(level: number): void {
+    this.level = Math.max(0, Math.min(1, level))
+    this.engine.send([Op.MasterGain, 0, 0, masterGain(this.level)])
+    this.changed()
+  }
+
+  /** The vibe as heard: with FX bypassed, reverb and EQ are off but speed stays. */
+  private heardVibe(): Vibe {
+    return this.fxBypassed ? { ...this.vibe, mix: 0, low: 0, mid: 0, high: 0, filter: 0, drive: 0, width: 1 } : this.vibe
   }
 
   // --- Song ---------------------------------------------------------------
@@ -344,7 +419,7 @@ export class Studio {
   async export(): Promise<ExportResult> {
     const sr = this.sampleRate
     const tail = Math.round(EXPORT_TAIL_SECONDS * sr)
-    const commands: Command[] = [[Op.MasterGain, 0, 0, MASTER_GAIN], ...vibeCommands(this.vibe)]
+    const commands: Command[] = [[Op.MasterGain, 0, 0, masterGain(this.level)], ...vibeCommands(this.heardVibe())]
     let frames: number
     let song: Int16Array | null = null
 
@@ -410,6 +485,7 @@ export class Studio {
       // Older sessions saved 16-step rows; widen them.
       this.pattern = session.pattern.map((row) => [...row, ...Array(Math.max(0, MAX_STEPS - row.length)).fill(false)])
       this.stepCount = session.stepCount ?? 16
+      this.level = session.level ?? DEFAULT_LEVEL
       this.bpm = session.bpm
       this.vibe = { ...FLAT_VIBE, ...session.vibe }
       this.selected = session.selected
@@ -418,10 +494,10 @@ export class Studio {
     }
 
     const commands: Command[] = [
-      [Op.MasterGain, 0, 0, MASTER_GAIN],
+      [Op.MasterGain, 0, 0, masterGain(this.level)],
       [Op.PatternLength, this.stepCount, 0, 0],
       [Op.Bpm, 0, 0, this.bpm],
-      ...vibeCommands(this.vibe),
+      ...vibeCommands(this.heardVibe()),
     ]
     this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
     await this.engine.applyNow(commands)
@@ -438,6 +514,7 @@ export class Studio {
     const session: SavedSession = {
       pattern: this.pattern,
       stepCount: this.stepCount,
+      level: this.level,
       bpm: this.bpm,
       vibe: this.vibe,
       selected: this.selected,
@@ -450,9 +527,18 @@ export class Studio {
   }
 }
 
-function vibeCommands(v: Partial<Vibe>): Command[] {
+function masterGain(level: number): number {
+  return (MASTER_GAIN * level) / DEFAULT_LEVEL
+}
+
+/** Engine commands for a vibe, or only for the given keys of it. */
+function vibeCommands(vibe: Vibe, keys?: (keyof Vibe)[]): Command[] {
+  const v: Partial<Vibe> = keys ? Object.fromEntries(keys.map((k) => [k, vibe[k]])) : vibe
   const out: Command[] = []
   if (v.speed !== undefined) out.push([Op.Speed, 0, 0, v.speed])
+  if (v.filter !== undefined) out.push([Op.Filter, 0, 0, v.filter])
+  if (v.drive !== undefined) out.push([Op.Drive, 0, 0, v.drive])
+  if (v.width !== undefined) out.push([Op.Width, 0, 0, v.width])
   if (v.size !== undefined) out.push([Op.Reverb, ReverbParam.Size, 0, v.size])
   if (v.damping !== undefined) out.push([Op.Reverb, ReverbParam.Damping, 0, v.damping])
   if (v.preDelayMs !== undefined) out.push([Op.Reverb, ReverbParam.PreDelayMs, 0, v.preDelayMs])

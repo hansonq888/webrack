@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "config.hpp"
+#include "dsp/deck.hpp"
 #include "dsp/eq.hpp"
 #include "dsp/reverb.hpp"
 #include "sampler.hpp"
@@ -26,7 +27,8 @@ struct Status {
 };
 
 // The whole engine. Signal chain:
-//   pads (sampler, sequencer) + song → speed → EQ → reverb → master → out
+//   pads (sampler, sequencer) + song → speed → drive → DJ filter → EQ
+//   → reverb → width → master → out
 // Everything is a fixed-size member and the engine is a single static object,
 // so nothing on the audio path allocates, locks, or calls into the host.
 class Engine {
@@ -55,9 +57,10 @@ public:
     void set_playing(bool playing) { sequencer_.set_playing(playing, now_); }
     void stop_after_steps(std::int64_t steps) { sequencer_.stop_after(steps); }
 
-    // Silence everything, e.g. before recording from the mic: stops the
-    // sequencer and song, fades out every voice, and flushes the reverb tail
-    // after fading the next block to zero. Output is silent from the block after.
+    // Silence everything, e.g. before recording or a fresh Play: stops the
+    // sequencer and song, fades out every sounding voice (~1.3 ms) and cuts
+    // the reverb tail over the next block. Anything started right after (in
+    // the same block) is unaffected, so a new downbeat keeps its attack.
     void stop_all();
     void set_pattern_length(std::size_t steps) { sequencer_.set_length(static_cast<std::uint32_t>(steps)); }
 
@@ -73,6 +76,9 @@ public:
     void set_eq_gain(std::size_t band, float db) { eq_.set_gain_db(band, db); }
     void set_reverb(dsp::Reverb::Param param, float value) { reverb_.set(param, value); }
     void set_master_gain(float gain) { master_gain_ = gain; }
+    void set_drive(float drive) { drive_.set(drive); }
+    void set_filter(float position) { filter_.set(position); }
+    void set_width(float width) { width_.set(width); }
 
     std::size_t sounding_voices() const { return sampler_.sounding_count(); }
 
@@ -83,12 +89,14 @@ private:
     std::int64_t now_ = 0;
     float speed_ = 1.0f;
     float master_gain_ = 0.8f;
-    bool flush_pending_ = false;
 
     Sampler sampler_;
     Sequencer sequencer_;
     SongPlayer song_;
+    dsp::Drive drive_;
+    dsp::DjFilter filter_;
     dsp::ThreeBandEq eq_;
+    dsp::Width width_;
     dsp::Reverb reverb_;
     Status status_;
 

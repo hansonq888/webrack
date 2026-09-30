@@ -185,6 +185,110 @@ static void test_stop_all_silences_everything() {
     CHECK(!e.status().seq_playing, "sequencer still playing");
 }
 
+// Level (RMS, dB) of the engine's left output while a pad plays `hz`.
+static float sine_level_db(Engine& e, float hz) {
+    std::vector<float> sine(48000);
+    for (std::size_t i = 0; i < sine.size(); ++i)
+        sine[i] = 0.3f * std::sin(2.0f * 3.14159265f * hz * static_cast<float>(i) / kRate);
+    load_pad(e, 0, sine);
+    e.trigger(0);
+    render(e, 40);  // let the filter settle
+    const auto out = render(e, 100);
+    double sum = 0.0;
+    for (float x : out) sum += static_cast<double>(x) * x;
+    return static_cast<float>(10.0 * std::log10(sum / static_cast<double>(out.size()) + 1e-20));
+}
+
+// Drive, filter and width at their neutral settings leave audio untouched;
+// away from neutral they do their job.
+// Play right after stop_all (same block): the old sound and the reverb tail
+// go, but the new downbeat lands at full level on its exact sample.
+static void test_restart_keeps_downbeat() {
+    std::printf("stop_all + play in one block keeps the new downbeat's attack\n");
+    Engine& e = g_engine;
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    load_pad(e, 0, {0.5f});                            // impulse
+    load_pad(e, 1, std::vector<float>(96000, 0.2f));  // long ringing sound
+    e.set_step(0, 0, true);
+    e.set_reverb(dsp::Reverb::Mix, 0.5f);
+    e.trigger(1);
+    render(e, 100);  // pad 1 ringing, reverb full
+    e.stop_all();
+    e.set_playing(true);
+    e.process();
+    const float mix_dry = std::cos(0.5f * 3.14159265f * 0.5f);
+    // Sample 0: the impulse through the dry path, plus what's left of the old
+    // sound (fading, ~0.2 * dry) and the fading wet tail.
+    const float first = e.out(0)[0];
+    CHECK(first > 0.5f * mix_dry, "downbeat attenuated: %f (expected > %f)", first, 0.5f * mix_dry);
+    const auto after = render(e, 50);
+    float peak = 0.0f;
+    for (float x : after) peak = std::max(peak, std::fabs(x));
+    CHECK(peak < 0.05f, "old sound or tail still audible after restart: peak %f", peak);
+}
+
+static void test_deck_effects() {
+    std::printf("drive, DJ filter, width: bypass exact, filters filter\n");
+    Engine& e = g_engine;
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    std::vector<float> noise(24000);
+    std::srand(3);
+    for (auto& x : noise) x = static_cast<float>(std::rand() % 65536) / 65536.0f - 0.5f;
+    load_pad(e, 0, noise);
+    e.set_drive(0.0f);
+    e.set_filter(0.0f);
+    e.set_width(1.0f);
+    e.trigger(0);
+    const auto out = render(e, noise.size() / kBlockSize);
+    std::size_t diffs = 0;
+    for (std::size_t i = 0; i < out.size(); ++i) diffs += out[i] != noise[i];
+    CHECK(diffs == 0, "neutral deck changed %zu samples", diffs);
+
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    const float open_5k = sine_level_db(e, 5000.0f);
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    e.set_filter(-1.0f);  // low-pass at 150 Hz
+    const float lp_5k = sine_level_db(e, 5000.0f);
+    CHECK(open_5k - lp_5k > 40.0f, "low-pass only cut 5 kHz by %.1f dB", open_5k - lp_5k);
+
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    const float open_60 = sine_level_db(e, 60.0f);
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    e.set_filter(1.0f);  // high-pass at 3 kHz
+    const float hp_60 = sine_level_db(e, 60.0f);
+    CHECK(open_60 - hp_60 > 40.0f, "high-pass only cut 60 Hz by %.1f dB", open_60 - hp_60);
+
+    // Full drive on a hot signal stays within +-1/g and never blows up.
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    load_pad(e, 0, std::vector<float>(4800, 0.95f));
+    e.set_drive(1.0f);
+    e.trigger(0);
+    float peak = 0.0f;
+    for (float x : render(e, 20)) peak = std::max(peak, std::fabs(x));
+    CHECK(peak > 0.0f && peak <= 1.0f / 8.0f + 1e-6f, "drive peak %f, expected <= 0.125", peak);
+
+    // Width 0 folds to mono: left equals right.
+    e.init(kRate);
+    e.set_width(0.0f);
+    load_pad(e, 0, noise);
+    e.set_reverb(dsp::Reverb::Mix, 0.5f);  // reverb is stereo, so L != R before width
+    e.trigger(0);
+    const auto frames = 60;
+    std::size_t differ = 0;
+    for (int b = 0; b < frames; ++b) {
+        e.process();
+        for (std::size_t i = 0; i < kBlockSize; ++i) differ += e.out(0)[i] != e.out(1)[i];
+    }
+    CHECK(differ == 0, "width 0 left %zu samples where L != R", differ);
+}
+
 static void test_process_never_allocates() {
     std::printf("no allocations in process()\n");
     Engine& e = g_engine;
@@ -193,6 +297,9 @@ static void test_process_never_allocates() {
     for (std::size_t s = 0; s < kDefaultSteps; ++s) e.set_step(0, s, true);
     e.set_reverb(dsp::Reverb::Mix, 0.4f);
     e.set_eq_gain(0, 6.0f);
+    e.set_drive(0.5f);
+    e.set_filter(-0.4f);
+    e.set_width(1.3f);
     e.set_playing(true);
     const long before = g_allocations.load();
     for (int b = 0; b < 10000; ++b) {
@@ -209,6 +316,8 @@ int main() {
     test_retrigger_chokes_same_pad();
     test_longer_patterns();
     test_stop_all_silences_everything();
+    test_restart_keeps_downbeat();
+    test_deck_effects();
     test_process_never_allocates();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

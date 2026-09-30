@@ -27,6 +27,9 @@ void Engine::init(float sample_rate) {
     sequencer_.init(sample_rate);
     song_.attach(song_storage_.data());
     song_.unload();
+    drive_.set(0.0f);
+    filter_.init(sample_rate);
+    width_.set(1.0f);
     eq_.init(sample_rate);
     reverb_.init(sample_rate);
     for (std::size_t p = 0; p < kNumPads; ++p) pads_[p] = {pad_storage_[p].data(), 0};
@@ -57,7 +60,7 @@ void Engine::stop_all() {
     sequencer_.set_playing(false, now_);
     song_.set_playing(false);
     sampler_.release_all();
-    flush_pending_ = true;
+    reverb_.flush();
 }
 
 void Engine::set_speed(float speed) {
@@ -91,24 +94,18 @@ void Engine::process() {
     }
     render_sources(cursor, kBlockSize);
 
+    drive_.process(left, right, kBlockSize);
+    filter_.process(left, right, kBlockSize);
     eq_.process(left, right, kBlockSize);
     reverb_.process(left, right, kBlockSize);
+    width_.process(left, right, kBlockSize);
 
-    // A pending stop_all fades this whole block to zero, then empties the
-    // reverb so nothing rings on.
-    const float fade_step = flush_pending_ ? 1.0f / static_cast<float>(kBlockSize) : 0.0f;
     float peak_l = 0.0f, peak_r = 0.0f;
     for (std::size_t i = 0; i < kBlockSize; ++i) {
-        const float gain = master_gain_ * (1.0f - fade_step * static_cast<float>(i + 1));
-        left[i] = soft_clip(left[i] * gain);
-        right[i] = soft_clip(right[i] * gain);
+        left[i] = soft_clip(left[i] * master_gain_);
+        right[i] = soft_clip(right[i] * master_gain_);
         peak_l = std::max(peak_l, std::fabs(left[i]));
         peak_r = std::max(peak_r, std::fabs(right[i]));
-    }
-
-    if (flush_pending_) {
-        reverb_.clear();
-        flush_pending_ = false;
     }
 
     now_ += static_cast<std::int64_t>(kBlockSize);

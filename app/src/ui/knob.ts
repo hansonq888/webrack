@@ -12,6 +12,8 @@ export interface KnobOptions {
   compact?: boolean
   /** Full range per vertical drag, in pixels. */
   dragPixels?: number
+  /** A ring of LEDs around the knob that light up to the value (the big encoder). */
+  ledRing?: number
 }
 
 const DRAG_PIXELS = 180 // full range per vertical drag
@@ -30,11 +32,11 @@ export class Knob {
     this.o = o
     this.value = o.value
     this.el = document.createElement('div')
-    this.el.className = o.compact ? 'knob knob-compact' : 'knob'
+    this.el.className = o.compact ? 'knob knob-compact' : o.ledRing ? 'knob knob-encoder' : 'knob'
     this.el.innerHTML = `
       <div class="knob-dial" role="slider" tabindex="0" aria-label="${o.label}"
            aria-valuemin="${o.min}" aria-valuemax="${o.max}">
-        <div class="knob-ticks"></div>
+        ${o.ledRing ? `<div class="knob-leds">${Array.from({ length: o.ledRing }, (_, i) => `<i style="--a:${-SWEEP_DEG / 2 + (i * SWEEP_DEG) / (o.ledRing! - 1)}deg"></i>`).join('')}</div>` : '<div class="knob-ticks"></div>'}
         <div class="knob-cap cap-${o.cap}"><i class="knob-pointer"></i></div>
       </div>
       <div class="knob-label">${o.label}</div>
@@ -87,7 +89,12 @@ export class Knob {
 
   private render(): void {
     const t = (this.value - this.o.min) / (this.o.max - this.o.min)
-    this.cap.style.transform = `rotate(${-SWEEP_DEG / 2 + t * SWEEP_DEG}deg)`
+    // Only the pointer turns; the cap's lighting and shadow stay fixed.
+    this.cap.style.setProperty('--angle', `${-SWEEP_DEG / 2 + t * SWEEP_DEG}deg`)
+    if (this.o.ledRing) {
+      const lit = Math.round(t * (this.o.ledRing - 1))
+      this.el.querySelectorAll('.knob-leds i').forEach((led, i) => led.classList.toggle('on', i <= lit))
+    }
     const text = this.o.format(this.value)
     this.readout.textContent = text
     const dial = this.el.querySelector('.knob-dial')!

@@ -49,3 +49,6 @@ WR_EXPORT void wr_set_reverb(int param, float value) {
     g_engine.set_reverb(static_cast<Reverb::Param>(param), value);
 }
 WR_EXPORT void wr_set_master_gain(float gain) { g_engine.set_master_gain(gain); }
+WR_EXPORT void wr_set_drive(float drive) { g_engine.set_drive(drive); }
+WR_EXPORT void wr_set_filter(float position) { g_engine.set_filter(position); }
+WR_EXPORT void wr_set_width(float width) { g_engine.set_width(width); }

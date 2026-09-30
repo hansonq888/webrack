@@ -40,8 +40,11 @@ public:
         mix_ = mix_target_;
     }
 
-    // Empties every delay line (the tail stops). The caller fades the output
-    // first so this doesn't click.
+    // Cuts the tail: the next block's wet signal fades to zero, then every
+    // delay line is emptied. The dry signal passes untouched, so anything new
+    // in that block (a fresh downbeat) keeps its attack.
+    void flush() { flush_pending_ = true; }
+
     void clear() {
         for (auto& channel : combs_)
             for (auto& c : channel) c.init(c.length);
@@ -89,11 +92,16 @@ public:
             mix_ += mix_step;
             const float angle = mix_ * (std::numbers::pi_v<float> * 0.5f);
             const float dry_gain = mix_ == 0.0f ? 1.0f : std::cos(angle);
-            const float wet_gain = mix_ == 0.0f ? 0.0f : std::sin(angle);
+            float wet_gain = mix_ == 0.0f ? 0.0f : std::sin(angle);
+            if (flush_pending_) wet_gain *= 1.0f - static_cast<float>(i + 1) / static_cast<float>(n);
             left[i] = left[i] * dry_gain + wet[0] * wet_gain;
             right[i] = right[i] * dry_gain + wet[1] * wet_gain;
         }
         mix_ = mix_target_;
+        if (flush_pending_) {
+            clear();
+            flush_pending_ = false;
+        }
     }
 
 private:
@@ -167,6 +175,7 @@ private:
     float damp_ = 0.2f;
     float mix_ = 0.0f;
     float mix_target_ = 0.0f;
+    bool flush_pending_ = false;
 };
 
 }  // namespace webrack::dsp

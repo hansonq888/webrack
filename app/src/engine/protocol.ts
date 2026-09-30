@@ -17,6 +17,9 @@ export const Op = {
   StopAfterSteps: 12, // a = steps (export: play exactly N loops)
   PatternLength: 13, // a = 16, 32 or 64
   StopAll: 14, // stop sequencer and song, fade voices, flush reverb
+  Drive: 15, // f = 0-1
+  Filter: 16, // f = -1 (low-pass) .. 0 (off) .. 1 (high-pass)
+  Width: 17, // f = 0 (mono) .. 1 (as is) .. 1.5
 } as const
 
 export const ReverbParam = { Size: 0, Damping: 1, PreDelayMs: 2, Mix: 3 } as const

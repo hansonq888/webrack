@@ -1,8 +1,9 @@
-// The device comes in two finishes (colorways), switchable on the device.
+// The device comes in seven finishes (colorways, shown as "themes"), Red by
+// default, switchable from the header.
 // Purely cosmetic, so the choice lives in localStorage, not the saved session.
 
-export type Finish = 'indie' | 'putty' | 'console' | 'red'
-export const FINISHES: Finish[] = ['indie', 'putty', 'console', 'red']
+export type Finish = 'indie' | 'putty' | 'console' | 'red' | 'sketch' | 'noir' | 'sunset'
+export const FINISHES: Finish[] = ['red', 'indie', 'putty', 'console', 'sketch', 'noir', 'sunset']
 const KEY = 'webrack.finish'
 
 export function loadFinish(): Finish {
@@ -12,7 +13,7 @@ export function loadFinish(): Finish {
   } catch {
     // Storage blocked: fall through to the default.
   }
-  return 'indie'
+  return 'red'
 }
 
 export function applyFinish(finish: Finish): void {

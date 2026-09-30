@@ -109,3 +109,64 @@ export class Waveform {
     }
   }
 }
+
+// Song mode's backdrop: the live waveform as one soft line across the
+// whole window, passing behind the device at its vertical center. Kept
+// deliberately calm: low swing, smoothed over time, drawn as a curve.
+export class Scope {
+  private readonly canvas: HTMLCanvasElement
+  private readonly analyser: AnalyserNode
+  private readonly samples: Float32Array<ArrayBuffer>
+  private shown = new Float32Array(0) // what's drawn, eased toward the live signal
+  private gain = 1
+
+  constructor(canvas: HTMLCanvasElement, analyser: AnalyserNode) {
+    this.canvas = canvas
+    this.analyser = analyser
+    this.samples = new Float32Array(analyser.fftSize)
+  }
+
+  /** Draws one frame; `centerY` is where the line rests (CSS px from the top). */
+  draw(color: string, active: boolean, centerY: number): void {
+    const { g, w, h } = fit(this.canvas)
+    if (w === 0 || h === 0) return
+    if (active) this.analyser.getFloatTimeDomainData(this.samples)
+    else this.samples.fill(0)
+
+    // Gentle auto-gain, eased slowly so the size never jumps.
+    let peak = 0
+    for (let i = 0; i < this.samples.length; i++) peak = Math.max(peak, Math.abs(this.samples[i]))
+    const target = peak > 0.001 ? Math.min(2.5, 0.6 / peak) : this.gain
+    this.gain += (target - this.gain) * 0.02
+
+    // Sample the waveform at a few points and ease each toward the new value.
+    const points = Math.max(32, Math.floor(w / 10))
+    if (this.shown.length !== points + 1) this.shown = new Float32Array(points + 1)
+    const stride = this.samples.length / points
+    for (let p = 0; p <= points; p++) {
+      const v = this.samples[Math.min(this.samples.length - 1, Math.floor(p * stride))] * this.gain
+      this.shown[p] += (Math.max(-1, Math.min(1, v)) - this.shown[p]) * 0.25
+    }
+
+    const amplitude = Math.min(h * 0.07, 48)
+    const x = (p: number) => (p / points) * w
+    const y = (p: number) => centerY - this.shown[p] * amplitude
+    g.lineWidth = 1.25
+    g.lineJoin = 'round'
+    g.lineCap = 'round'
+    g.strokeStyle = color
+    g.shadowColor = color
+    g.shadowBlur = 5
+    g.globalAlpha = active ? 0.45 : 0.18
+    // A smooth curve through the points (midpoint quadratic splines).
+    g.beginPath()
+    g.moveTo(x(0), y(0))
+    for (let p = 1; p < points; p++) {
+      g.quadraticCurveTo(x(p), y(p), (x(p) + x(p + 1)) / 2, (y(p) + y(p + 1)) / 2)
+    }
+    g.lineTo(x(points), y(points))
+    g.stroke()
+    g.globalAlpha = 1
+    g.shadowBlur = 0
+  }
+}
