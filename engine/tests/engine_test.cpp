@@ -108,18 +108,36 @@ static void test_reverb_mix_zero_is_bypass() {
 }
 
 static void test_polyphony_and_stealing() {
-    std::printf("polyphony: 16 voices, 17th steals\n");
+    std::printf("polyphony: 16 pads layer, a 17th voice steals\n");
     Engine& e = g_engine;
     e.init(kRate);
-    load_pad(e, 0, std::vector<float>(48000, 0.01f));
-    for (int i = 0; i < 16; ++i) e.trigger(0);
+    for (std::size_t p = 0; p < kNumPads; ++p) load_pad(e, p, std::vector<float>(48000, 0.01f));
+    for (std::size_t p = 0; p < kNumPads; ++p) e.trigger(p);
     e.process();
     CHECK(e.sounding_voices() == 16, "expected 16 voices, got %zu", e.sounding_voices());
+    e.trigger(0);  // chokes pad 0's own voice rather than stealing another pad's
+    CHECK(e.sounding_voices() == 16, "after a 17th hit expected 16 sounding, got %zu", e.sounding_voices());
+    e.process();  // the choked voice fades out within this block
+    CHECK(e.sounding_voices() == 16, "after the fade expected 16 voices, got %zu", e.sounding_voices());
+}
+
+// A repeat hit on the same pad cuts the previous one (with a short fade)
+// instead of layering on top of it.
+static void test_retrigger_chokes_same_pad() {
+    std::printf("retriggering a pad chokes its previous hit\n");
+    Engine& e = g_engine;
+    e.init(kRate);
+    e.set_master_gain(1.0f);
+    load_pad(e, 0, std::vector<float>(48000, 0.25f));
     e.trigger(0);
-    CHECK(e.sounding_voices() == 16, "after 17th hit expected 16 sounding, got %zu", e.sounding_voices());
-    // The stolen voice fades out within the next block.
     e.process();
-    CHECK(e.sounding_voices() == 16, "after fade expected 16 voices, got %zu", e.sounding_voices());
+    e.trigger(0);
+    e.process();
+    CHECK(e.sounding_voices() == 1, "expected 1 voice after a retrigger, got %zu", e.sounding_voices());
+    // Once the fade is over, the output is one voice's level, not two stacked.
+    e.process();
+    const float level = e.out(0)[kBlockSize - 1];
+    CHECK(std::fabs(level - 0.25f) < 1e-6f, "retriggered level %f, expected a single voice at 0.25", level);
 }
 
 static void test_process_never_allocates() {
@@ -143,6 +161,7 @@ int main() {
     test_sequencer_is_sample_accurate();
     test_reverb_mix_zero_is_bypass();
     test_polyphony_and_stealing();
+    test_retrigger_chokes_same_pad();
     test_process_never_allocates();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

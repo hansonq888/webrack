@@ -8,7 +8,7 @@ const NUM_PADS = 16
 const NUM_STEPS = 16
 const MAX_VOICES = 16
 const VOICE_SLOTS = MAX_VOICES + 8
-const STEAL_FADE_STEP = 1 / 64
+const FADE_STEP = 1 / 64
 
 // --- Interpolation (engine/src/dsp/interp.hpp) ---------------------------
 
@@ -57,10 +57,12 @@ class Sampler {
 
   trigger(pad: number, gain: number, length: number): void {
     if (length === 0) return
+    // Each pad chokes itself: fade out its previous voice.
+    for (const v of this.voices) if (v.active && v.pad === pad && v.fadeStep === 0) v.fadeStep = FADE_STEP
     if (this.soundingCount() >= MAX_VOICES) {
       let oldest: Voice | null = null
       for (const v of this.voices) if (v.active && v.fadeStep === 0 && (!oldest || v.age < oldest.age)) oldest = v
-      if (oldest) oldest.fadeStep = STEAL_FADE_STEP
+      if (oldest) oldest.fadeStep = FADE_STEP
     }
     // An inactive slot, or failing that the quietest fading voice.
     let slot = this.voices[0]

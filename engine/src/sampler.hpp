@@ -15,9 +15,11 @@ struct PadSample {
     std::uint32_t length = 0;  // 0 = empty pad
 };
 
-// One-shot sample voices. At most kMaxVoices sound at once; a new hit beyond
-// that steals the oldest voice, which fades out over ~1.3 ms instead of being
-// cut (no click). Spare slots hold those fading voices.
+// One-shot sample voices. Each pad chokes itself: a new hit on a pad fades out
+// that pad's previous voice, so fast repeats stutter instead of piling up
+// (different pads still layer). At most kMaxVoices sound at once; a hit beyond
+// that steals the oldest voice. Choked and stolen voices fade out over ~1.3 ms
+// instead of being cut (no click); spare slots hold them while they fade.
 class Sampler {
 public:
     void reset() {
@@ -27,8 +29,10 @@ public:
 
     void trigger(std::uint32_t pad, float gain, const PadSample& sample) {
         if (sample.length == 0) return;
+        for (auto& v : voices_)
+            if (v.active && v.pad == pad && v.fade_step == 0.0f) v.fade_step = kFadeStep;
         if (sounding_count() >= kMaxVoices) {
-            if (Voice* oldest = oldest_sounding()) oldest->fade_step = kStealFadeStep;
+            if (Voice* oldest = oldest_sounding()) oldest->fade_step = kFadeStep;
         }
         Voice* v = free_slot();
         *v = Voice{};
@@ -75,7 +79,7 @@ public:
 
 private:
     static constexpr std::size_t kSlots = kMaxVoices + 8;
-    static constexpr float kStealFadeStep = 1.0f / 64.0f;
+    static constexpr float kFadeStep = 1.0f / 64.0f;
 
     struct Voice {
         bool active = false;
