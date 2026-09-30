@@ -12,6 +12,7 @@ import {
 import { MAX_RECORD_SECONDS } from '../audio/recorder'
 import { Knob, type KnobOptions } from './knob'
 import { FINISHES, applyFinish, type Finish } from './finish'
+import { Spectrum, Waveform, type VizColors } from './visualizer'
 
 const PAD_KEYS = '1234qwerasdfzxcv'
 const PAGE_STEPS = 16 // steps shown at once; longer patterns are paged
@@ -73,11 +74,13 @@ function bindFinishSwitch(root: HTMLElement): void {
 
 function deviceTop(): string {
   return `
+    <span class="screws" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
     <header class="device-top">
       <div class="brand">
         <span class="wordmark">webrack</span>
         <span class="model">WR-16 · Sampling console</span>
       </div>
+      <div class="grille" aria-hidden="true"></div>
       <div class="lamps" aria-hidden="true">
         <span class="lamp-group"><i class="lamp lamp-rec"></i>Rec</span>
         <span class="lamp-group"><i class="lamp lamp-run"></i>Run</span>
@@ -89,8 +92,8 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
   root.innerHTML = `
     <div class="device">
       ${deviceTop()}
-      <div class="device-grid">
-        <div class="col-main">
+      <div class="machine">
+        <section class="m-screen">
           <div class="lcd" aria-live="polite">
             <div class="lcd-row">
               <span id="lcd-mode">BEAT</span>
@@ -104,83 +107,108 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
               <span class="lcd-meter" aria-hidden="true"><i id="meter-l"></i><i id="meter-r"></i></span>
             </div>
           </div>
-
-          <div class="mode-switch" role="tablist" aria-label="Source">
-            <button class="key key-small" role="tab" data-mode="beat">Beat</button>
-            <button class="key key-small" role="tab" data-mode="song">Song</button>
+          <div class="screen-controls">
+            <div class="seg" role="group" aria-label="Source">
+              <button class="key key-small" data-mode="beat">Beat</button>
+              <button class="key key-small" data-mode="song">Song</button>
+            </div>
           </div>
+        </section>
 
-          <section class="beat-only beat-section">
+        <section class="m-pads">
+          <div class="beat-only pad-block">
+            <div class="section-label"><span>Pads</span><b>1–16</b></div>
             <div class="pads" role="group" aria-label="Pads">
               ${Array.from({ length: NUM_PADS }, (_, i) => `
                 <button class="pad" data-pad="${i}">
-                  <span class="pad-key">${PAD_KEYS[i].toUpperCase()}</span>
-                  <span class="pad-name"></span>
+                  <span class="pad-num">${String(i + 1).padStart(2, '0')}</span>
+                  <span class="pad-foot"><span class="pad-name"></span><span class="pad-key">${PAD_KEYS[i].toUpperCase()}</span></span>
                   <i class="pad-led"></i>
                 </button>`).join('')}
             </div>
-
             <div class="pad-tools">
-              <button class="key key-red" id="rec"><i class="rec-dot"></i> <span id="rec-label">Rec</span></button>
+              <button class="key" id="rec"><i class="rec-dot"></i> <span id="rec-label">Rec</span></button>
               <button class="key" id="load">Load</button>
               <button class="key" id="reset">Reset</button>
               <input type="file" id="load-input" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" hidden />
             </div>
-
-            <div class="section-label"><span>Steps</span><b id="steps-pad"></b></div>
-            <div class="steps-bar">
-              <div class="seg" role="group" aria-label="Pattern length">
-                ${STEP_COUNTS.map((n) => `<button class="key key-small" data-count="${n}">${n}</button>`).join('')}
-              </div>
-              <div class="seg pages" role="group" aria-label="Bar">
-                ${[0, 1, 2, 3].map((p) => `<button class="key key-small" data-page="${p}" aria-label="Bar ${p + 1}">${p + 1}<i class="page-led"></i></button>`).join('')}
-              </div>
-            </div>
-            <div class="steps" role="group" aria-label="Steps">
-              ${Array.from({ length: PAGE_STEPS }, (_, i) => `<button class="step" data-step="${i}"><i></i></button>`).join('')}
-            </div>
-          </section>
-
-          <section class="song-only song-panel">
-            <label class="drop" id="song-drop">
-              <input type="file" id="song-input" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" hidden />
-              <b id="song-name">Drop a song here</b>
-              <span id="song-hint">or tap to choose a file (WAV, MP3, FLAC · up to 6 min)</span>
-            </label>
-            <div class="song-bar" id="song-bar" role="slider" aria-label="Song position" tabindex="0"><i id="song-fill"></i></div>
-          </section>
-
-          <div class="transport">
-            <button class="key key-orange key-play" id="play" aria-label="Play">▶</button>
-            <label class="fader beat-only">
-              <span class="fader-label">BPM</span>
-              <input type="range" id="bpm" min="60" max="180" step="1" aria-label="Tempo in BPM" />
-              <output id="bpm-out"></output>
-            </label>
-            <button class="key beat-only" id="clear">Clear</button>
           </div>
-        </div>
 
-        <div class="col-side">
-          <div class="section-label"><span>Vibe</span></div>
+          <div class="song-only song-panel">
+            <label class="drop song-screen" id="song-drop">
+              <input type="file" id="song-input" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" hidden />
+              <canvas class="viz" id="viz" aria-hidden="true"></canvas>
+              <span class="song-meta">
+                <b id="song-name">Drop a song here</b>
+                <span id="song-hint">or tap to choose a file (WAV, MP3, FLAC · up to 6 min)</span>
+              </span>
+            </label>
+            <div class="song-transport">
+              <button class="key key-orange key-transport song-play" id="song-play" aria-label="Play">
+                <svg class="icon icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4a.8.8 0 0 0 1.2.7l8.3-5.2a.8.8 0 0 0 0-1.4L5.7 2.1a.8.8 0 0 0-1.2.7Z" /></svg>
+                <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3.2" height="11" rx="0.8" /><rect x="9.3" y="2.5" width="3.2" height="11" rx="0.8" /></svg>
+                <span id="song-play-label">Play</span>
+              </button>
+              <div class="song-timeline">
+                <div class="song-bar" id="song-bar" role="slider" aria-label="Song position" tabindex="0">
+                  <canvas class="wave" id="wave" aria-hidden="true"></canvas><b class="song-head" id="song-head"></b>
+                </div>
+                <div class="song-times"><span id="song-now">0:00</span><span id="song-total">0:00</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="m-transport beat-only">
+          <button class="key key-transport" id="stop" aria-label="Stop"><span class="glyph">■</span> Stop</button>
+          <button class="key key-orange key-transport key-play" id="play" aria-label="Play"><span class="glyph">▶</span> Play</button>
+          <div class="tempo" role="group" aria-label="Tempo">
+            <span class="tempo-label">Tempo</span>
+            <output class="tempo-led" id="bpm-out" aria-live="off"></output>
+            <div id="tempo-knob"></div>
+            <button class="key key-small" id="tap" aria-label="Tap tempo (T)">Tap</button>
+          </div>
+          <button class="key" id="clear">Clear</button>
+        </section>
+
+        <section class="m-seq beat-only">
+          <div class="seq-head">
+            <div class="section-label"><span>Step sequencer</span><b id="steps-pad"></b></div>
+            <button class="key key-small" id="len" aria-label="Pattern length"></button>
+          </div>
+          <div class="bar-tabs" role="tablist" aria-label="Bars">
+            ${[0, 1, 2, 3].map((b) => `
+              <button class="key key-small bar-tab" role="tab" data-bar="${b}">
+                <span class="bar-num">Bar ${b + 1}</span>
+                <span class="bar-mini" aria-hidden="true">${'<i></i>'.repeat(PAGE_STEPS)}</span>
+                <i class="bar-led" aria-hidden="true"></i>
+              </button>`).join('')}
+          </div>
+          <div class="steps" role="group" aria-label="Steps">
+            ${Array.from({ length: PAGE_STEPS }, (_, i) => `<button class="step" data-step="${i}"><i></i><span class="step-num">${i + 1}</span></button>`).join('')}
+          </div>
+        </section>
+
+        <section class="m-qlink">
+          <div class="section-label"><span>Q-Link · Vibe</span></div>
           <div class="presets">
             <button class="key key-orange" id="preset-slowed">Slowed + reverb</button>
             <button class="key" id="preset-flat">Dry</button>
           </div>
           <div class="knobs" id="knobs"></div>
+        </section>
 
+        <section class="m-out">
           <div class="section-label"><span>Out</span></div>
-          <div class="export">
-            <button class="key key-cream key-wide" id="export">Export WAV</button>
-            <div class="export-result" id="export-result" hidden>
-              <div class="export-file" id="export-file"></div>
-              <div class="export-actions">
-                <button class="key key-orange" id="share">Share</button>
-                <a class="key" id="download">Download</a>
-              </div>
+          <button class="key key-cream key-wide" id="export">Export WAV</button>
+          <div class="export-result" id="export-result" hidden>
+            <div class="export-file" id="export-file"></div>
+            <div class="export-actions">
+              <button class="key key-orange" id="share">Share</button>
+              <a class="key" id="download">Download</a>
             </div>
           </div>
-        </div>
+        </section>
       </div>
       ${deviceFoot('Your audio never leaves this device. Drag an audio file onto a pad to load it.')}
     </div>`
@@ -200,6 +228,12 @@ class StudioView {
   private exportUrl: string | null = null
   private exporting = false
   private lastExport: ExportResult | null = null
+  private tempoKnob: Knob | null = null
+  private readonly spectrum: Spectrum
+  private readonly waveform: Waveform
+  private vizColors: { spectrum: VizColors; wave: VizColors } | null = null
+  private vizColorsAt = 0
+  private taps: number[] = []
   private readonly root: HTMLElement
   private readonly studio: Studio
 
@@ -208,6 +242,8 @@ class StudioView {
     this.studio = studio
     this.pads = [...root.querySelectorAll<HTMLButtonElement>('.pad')]
     this.steps = [...root.querySelectorAll<HTMLButtonElement>('.step')]
+    this.spectrum = new Spectrum($<HTMLCanvasElement>(root, '#viz'), studio.engine.analyser)
+    this.waveform = new Waveform($<HTMLCanvasElement>(root, '#wave'))
     this.buildKnobs()
     this.bindPads()
     this.bindControls()
@@ -274,6 +310,10 @@ class StudioView {
         s.togglePlay()
         return
       }
+      if (e.key.toLowerCase() === 't' && !e.repeat) {
+        this.tapTempo()
+        return
+      }
       const i = PAD_KEYS.indexOf(e.key.toLowerCase())
       if (i < 0 || s.mode !== 'beat') return
       e.preventDefault()
@@ -292,6 +332,13 @@ class StudioView {
     this.root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
       b.addEventListener('click', () => s.setMode(b.dataset.mode as 'beat' | 'song')),
     )
+    on('#len', () => s.setStepCount(STEP_COUNTS[(STEP_COUNTS.indexOf(s.stepCount) + 1) % STEP_COUNTS.length]))
+    this.root.querySelectorAll<HTMLButtonElement>('[data-bar]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.page = Number(b.dataset.bar)
+        this.render()
+      }),
+    )
 
     on('#rec', () => void this.toggleRecording())
     const loadInput = $<HTMLInputElement>(this.root, '#load-input')
@@ -303,18 +350,23 @@ class StudioView {
     })
     on('#reset', () => void s.resetPad(s.selected).then(() => this.flash('KIT SOUND RESTORED')))
 
-    on('#play', () => s.togglePlay())
-    const bpm = $<HTMLInputElement>(this.root, '#bpm')
-    bpm.addEventListener('input', () => s.setBpm(Number(bpm.value)))
-    this.root.querySelectorAll<HTMLButtonElement>('[data-count]').forEach((b) =>
-      b.addEventListener('click', () => s.setStepCount(Number(b.dataset.count) as 16 | 32 | 64)),
-    )
-    this.root.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) =>
-      b.addEventListener('click', () => {
-        this.page = Number(b.dataset.page)
-        this.render()
-      }),
-    )
+    on('#play', () => s.play())
+    this.tempoKnob = new Knob({
+      label: 'Tempo',
+      cap: 'cream',
+      min: 60,
+      max: 180,
+      value: s.bpm,
+      reset: 90,
+      step: 1,
+      format: (v) => `${Math.round(v)} BPM`,
+      onInput: (v) => s.setBpm(v),
+      compact: true,
+      dragPixels: 360, // finer: about 3 px per BPM
+    })
+    $(this.root, '#tempo-knob').append(this.tempoKnob.el)
+    on('#tap', () => this.tapTempo())
+    on('#stop', () => s.stop())
     on('#clear', () => {
       s.clearPattern()
       this.flash('PATTERN CLEARED')
@@ -349,16 +401,48 @@ class StudioView {
       if (file) void this.loadSong(file)
     })
     const bar = $(this.root, '#song-bar')
-    bar.addEventListener('pointerdown', (e) => {
+    const seek = (e: PointerEvent) => {
       const rect = bar.getBoundingClientRect()
       s.seekSong((e.clientX - rect.left) / rect.width)
+    }
+    bar.addEventListener('pointerdown', (e) => {
+      bar.setPointerCapture(e.pointerId)
+      seek(e)
     })
+    bar.addEventListener('pointermove', (e) => {
+      if (bar.hasPointerCapture(e.pointerId)) seek(e)
+    })
+    bar.addEventListener('keydown', (e) => {
+      if (!s.song) return
+      const step = 5 / (s.song.frames / s.sampleRate) // 5 s per arrow press
+      const now = s.engine.status().songFrame / s.song.frames
+      if (e.key === 'ArrowRight') s.seekSong(now + step)
+      else if (e.key === 'ArrowLeft') s.seekSong(now - step)
+      else return
+      e.preventDefault()
+    })
+    on('#song-play', () => s.togglePlay())
 
     on('#export', () => void this.export())
     on('#share', () => void this.share())
   }
 
   // --- Actions ----------------------------------------------------------------
+
+  // Tap tempo: the average of the last few intervals; a 2 s pause starts over.
+  private tapTempo(): void {
+    const now = performance.now()
+    if (this.taps.length && now - this.taps[this.taps.length - 1] > 2000) this.taps = []
+    this.taps = [...this.taps.slice(-4), now]
+    const led = $(this.root, '#bpm-out')
+    led.classList.remove('tap')
+    void led.offsetWidth
+    led.classList.add('tap')
+    if (this.taps.length < 2) return
+    const intervals = this.taps.slice(1).map((t, i) => t - this.taps[i])
+    const average = intervals.reduce((a, b) => a + b, 0) / intervals.length
+    this.studio.setBpm(60_000 / average)
+  }
 
   private hit(i: number): void {
     this.studio.hit(i)
@@ -489,14 +573,10 @@ class StudioView {
   private render(): void {
     const s = this.studio
     this.root.querySelector('.device')!.setAttribute('data-mode', s.mode)
-    this.root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
-      b.setAttribute('aria-selected', String(b.dataset.mode === s.mode)),
-    )
     $(this.root, '#lcd-mode').textContent = s.mode === 'beat' ? 'BEAT' : 'SONG'
     $(this.root, '#lcd-bpm').textContent = String(s.bpm).padStart(3, '0')
-    $(this.root, '#bpm-out').textContent = String(s.bpm)
-    const bpmInput = $<HTMLInputElement>(this.root, '#bpm')
-    if (document.activeElement !== bpmInput) bpmInput.value = String(s.bpm)
+    $(this.root, '#bpm-out').textContent = String(s.bpm).padStart(3, '0')
+    this.tempoKnob?.set(s.bpm)
     $(this.root, '#lcd-speed').textContent = `${s.vibe.speed.toFixed(2)}×`
 
     this.pads.forEach((pad, i) => {
@@ -509,13 +589,19 @@ class StudioView {
     // Pattern length and bar pages.
     const bars = s.stepCount / PAGE_STEPS
     if (this.page >= bars) this.page = 0
-    this.root.querySelectorAll<HTMLButtonElement>('[data-count]').forEach((b) =>
-      b.setAttribute('aria-pressed', String(Number(b.dataset.count) === s.stepCount)),
+    this.root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode)),
     )
-    this.root.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) => {
-      const p = Number(b.dataset.page)
-      b.hidden = bars === 1 || p >= bars
-      b.setAttribute('aria-pressed', String(p === this.page))
+    $(this.root, '#len').textContent = `Len ${s.stepCount}`
+    // Bar tabs, each with a mini map of the selected pad's hits in that bar.
+    $(this.root, '.bar-tabs').hidden = bars === 1
+    this.root.querySelectorAll<HTMLButtonElement>('[data-bar]').forEach((tab) => {
+      const b = Number(tab.dataset.bar)
+      tab.hidden = b >= bars
+      tab.setAttribute('aria-selected', String(b === this.page))
+      tab.querySelectorAll('.bar-mini i').forEach((cell, j) =>
+        cell.classList.toggle('on', s.pattern[s.selected][b * PAGE_STEPS + j]),
+      )
     })
     this.steps.forEach((step, i) => {
       const index = this.page * PAGE_STEPS + i
@@ -554,14 +640,12 @@ class StudioView {
 
     const playing = s.mode === 'song' ? st.songPlaying : s.playing
     const play = $(this.root, '#play')
-    play.textContent = playing ? '■' : '▶'
-    play.setAttribute('aria-label', playing ? 'Stop' : 'Play')
     play.classList.toggle('lit', playing)
 
     this.lcdSteps.forEach((dot, i) => dot.classList.toggle('now', i === st.step))
     this.steps.forEach((step, i) => step.classList.toggle('now', this.page * PAGE_STEPS + i === st.step))
-    this.root.querySelectorAll<HTMLElement>('[data-page]').forEach((b) =>
-      b.classList.toggle('playing', st.step >= 0 && Math.floor(st.step / PAGE_STEPS) === Number(b.dataset.page)),
+    this.root.querySelectorAll<HTMLElement>('[data-bar]').forEach((tab) =>
+      tab.classList.toggle('playing', st.step >= 0 && Math.floor(st.step / PAGE_STEPS) === Number(tab.dataset.bar)),
     )
 
     // While recording, the meters show the mic input instead of the output.
@@ -572,10 +656,41 @@ class StudioView {
 
     const progress = st.songLength > 0 ? st.songFrame / st.songLength : 0
     $(this.root, '#lcd-progress').style.transform = `scaleX(${progress})`
-    $(this.root, '#song-fill').style.transform = `scaleX(${progress})`
+    if (s.mode === 'song') {
+      const colors = this.colors()
+      this.spectrum.draw(colors.spectrum, st.songPlaying)
+      this.waveform.draw(s.song?.waveform ?? null, progress, colors.wave)
+    }
+    $(this.root, '#song-head').style.left = `${progress * 100}%`
+    const songPlay = $(this.root, '#song-play')
+    songPlay.classList.toggle('playing', st.songPlaying)
+    songPlay.classList.toggle('lit', st.songPlaying)
+    songPlay.setAttribute('aria-label', st.songPlaying ? 'Pause' : 'Play')
+    $(this.root, '#song-play-label').textContent = st.songPlaying ? 'Pause' : 'Play'
+    if (s.song) {
+      $(this.root, '#song-now').textContent = formatTime(st.songFrame / s.sampleRate)
+      $(this.root, '#song-total').textContent = formatTime(s.song.frames / s.sampleRate)
+      $(this.root, '#song-bar').setAttribute('aria-valuetext', `${formatTime(st.songFrame / s.sampleRate)} of ${formatTime(s.song.frames / s.sampleRate)}`)
+    }
 
     $(this.root, '#lcd-msg').textContent = this.lcdMessage(st.songFrame)
     requestAnimationFrame(this.frame)
+  }
+
+  // Visualizer colors come from the finish's CSS tokens (the spectrum uses
+  // the display's colors). Re-read twice a second so a finish switch applies.
+  private colors(): { spectrum: VizColors; wave: VizColors } {
+    const now = performance.now()
+    if (!this.vizColors || now - this.vizColorsAt > 500) {
+      const css = getComputedStyle(this.root.querySelector('.device')!)
+      const v = (name: string) => css.getPropertyValue(name).trim()
+      this.vizColors = {
+        spectrum: { lit: v('--lcd-fg'), dim: v('--lcd-dim'), peak: '#ffffff' },
+        wave: { lit: v('--accent'), dim: 'rgba(255, 255, 255, 0.16)', peak: v('--accent') },
+      }
+      this.vizColorsAt = now
+    }
+    return this.vizColors
   }
 
   private lcdMessage(songFrame: number): string {

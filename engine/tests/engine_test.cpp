@@ -162,6 +162,29 @@ static void test_longer_patterns() {
     }
 }
 
+// Stop-all (used before mic recording): one faded block, then true silence,
+// including the reverb tail.
+static void test_stop_all_silences_everything() {
+    std::printf("stop_all silences voices, song, sequencer and reverb tail\n");
+    Engine& e = g_engine;
+    e.init(kRate);
+    load_pad(e, 0, std::vector<float>(96000, 0.3f));
+    for (std::size_t s = 0; s < kDefaultSteps; ++s) e.set_step(0, s, true);
+    e.set_reverb(dsp::Reverb::Size, 0.95f);
+    e.set_reverb(dsp::Reverb::Mix, 0.8f);
+    e.set_playing(true);
+    render(e, 400);  // build up a long reverb tail
+    e.stop_all();
+    e.process();     // the fade-out block
+    const float last = std::fabs(e.out(0)[kBlockSize - 1]);
+    CHECK(last < 1e-6f, "fade block should end at zero, got %f", last);
+    const auto after = render(e, 200);
+    float peak = 0.0f;
+    for (float x : after) peak = std::max(peak, std::fabs(x));
+    CHECK(peak < 1e-6f, "expected silence after stop_all, peak %g", peak);
+    CHECK(!e.status().seq_playing, "sequencer still playing");
+}
+
 static void test_process_never_allocates() {
     std::printf("no allocations in process()\n");
     Engine& e = g_engine;
@@ -185,6 +208,7 @@ int main() {
     test_polyphony_and_stealing();
     test_retrigger_chokes_same_pad();
     test_longer_patterns();
+    test_stop_all_silences_everything();
     test_process_never_allocates();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

@@ -8,6 +8,10 @@ export interface KnobOptions {
   step?: number
   format: (v: number) => string
   onInput: (v: number) => void
+  /** Hide the printed label and value (the caller shows them elsewhere). */
+  compact?: boolean
+  /** Full range per vertical drag, in pixels. */
+  dragPixels?: number
 }
 
 const DRAG_PIXELS = 180 // full range per vertical drag
@@ -26,7 +30,7 @@ export class Knob {
     this.o = o
     this.value = o.value
     this.el = document.createElement('div')
-    this.el.className = 'knob'
+    this.el.className = o.compact ? 'knob knob-compact' : 'knob'
     this.el.innerHTML = `
       <div class="knob-dial" role="slider" tabindex="0" aria-label="${o.label}"
            aria-valuemin="${o.min}" aria-valuemax="${o.max}">
@@ -50,7 +54,7 @@ export class Knob {
     dial.addEventListener('pointermove', (e) => {
       if (!dial.hasPointerCapture(e.pointerId)) return
       const fine = e.shiftKey ? 0.2 : 1
-      const delta = ((startY - e.clientY) / DRAG_PIXELS) * (o.max - o.min) * fine
+      const delta = ((startY - e.clientY) / (o.dragPixels ?? DRAG_PIXELS)) * (o.max - o.min) * fine
       this.input(startValue + delta)
     })
     const end = () => this.el.classList.remove('active')

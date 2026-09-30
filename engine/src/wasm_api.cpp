@@ -33,6 +33,7 @@ WR_EXPORT void wr_clear_pattern() { g_engine.clear_pattern(); }
 WR_EXPORT void wr_set_bpm(float bpm) { g_engine.set_bpm(bpm); }
 WR_EXPORT void wr_set_playing(int playing) { g_engine.set_playing(playing != 0); }
 WR_EXPORT void wr_stop_after_steps(int steps) { g_engine.stop_after_steps(steps); }
+WR_EXPORT void wr_stop_all() { g_engine.stop_all(); }
 WR_EXPORT void wr_set_pattern_length(int steps) { g_engine.set_pattern_length(static_cast<std::size_t>(steps)); }
 
 WR_EXPORT std::int16_t* wr_song_data() { return g_engine.song_data(); }

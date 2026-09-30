@@ -61,6 +61,8 @@ export class EngineClient {
 
   readonly context: AudioContext
   readonly node: AudioWorkletNode
+  /** A tap on the live output for visualizers (the audio path is unaffected). */
+  readonly analyser: AnalyserNode
 
   private constructor(
     context: AudioContext,
@@ -71,6 +73,10 @@ export class EngineClient {
   ) {
     this.context = context
     this.node = node
+    this.analyser = context.createAnalyser()
+    this.analyser.fftSize = 2048
+    this.analyser.smoothingTimeConstant = 0.72
+    node.connect(this.analyser)
     this.padCapacity = ready.padCapacity
     this.songCapacity = ready.songCapacity
     this.ring = ring ? new RingWriter(ring) : null

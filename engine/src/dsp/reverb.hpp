@@ -40,6 +40,17 @@ public:
         mix_ = mix_target_;
     }
 
+    // Empties every delay line (the tail stops). The caller fades the output
+    // first so this doesn't click.
+    void clear() {
+        for (auto& channel : combs_)
+            for (auto& c : channel) c.init(c.length);
+        for (auto& channel : allpasses_)
+            for (auto& a : channel) a.init(a.length);
+        predelay_.fill(0.0f);
+        hp_state_ = hp_prev_ = 0.0f;
+    }
+
     void set(Param param, float value) {
         switch (param) {
             case Size: feedback_ = 0.7f + 0.28f * clamp01(value); break;

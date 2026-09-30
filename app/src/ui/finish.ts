@@ -1,18 +1,18 @@
 // The device comes in two finishes (colorways), switchable on the device.
 // Purely cosmetic, so the choice lives in localStorage, not the saved session.
 
-export type Finish = 'console' | 'putty'
-export const FINISHES: Finish[] = ['console', 'putty']
+export type Finish = 'indie' | 'putty' | 'console' | 'red'
+export const FINISHES: Finish[] = ['indie', 'putty', 'console', 'red']
 const KEY = 'webrack.finish'
 
 export function loadFinish(): Finish {
   try {
     const saved = localStorage.getItem(KEY)
-    if (saved === 'console' || saved === 'putty') return saved
+    if (saved && (FINISHES as string[]).includes(saved)) return saved as Finish
   } catch {
     // Storage blocked: fall through to the default.
   }
-  return 'console'
+  return 'indie'
 }
 
 export function applyFinish(finish: Finish): void {

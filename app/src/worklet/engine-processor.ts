@@ -36,6 +36,7 @@ interface EngineExports {
   wr_set_playing(playing: number): void
   wr_stop_after_steps(steps: number): void
   wr_set_pattern_length(steps: number): void
+  wr_stop_all(): void
   wr_song_data(): number
   wr_song_capacity(): number
   wr_song_begin(): void
@@ -118,6 +119,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       case Op.MasterGain: e.wr_set_master_gain(f); break
       case Op.StopAfterSteps: e.wr_stop_after_steps(a); break
       case Op.PatternLength: e.wr_set_pattern_length(a); break
+      case Op.StopAll: e.wr_stop_all(); break
     }
   }
 

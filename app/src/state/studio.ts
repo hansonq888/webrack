@@ -52,6 +52,23 @@ export interface Song {
   data: Int16Array // interleaved stereo at the engine's rate
   frames: number
   truncated: boolean
+  waveform: Float32Array // peak (0-1) per bucket, for the timeline
+}
+
+const WAVEFORM_BUCKETS = 480
+
+/** Peak level per bucket across both channels, for drawing the timeline. */
+function waveformOf(data: Int16Array, buckets: number): Float32Array {
+  const frames = data.length / 2
+  const out = new Float32Array(buckets)
+  for (let b = 0; b < buckets; b++) {
+    const start = Math.floor((b * frames) / buckets) * 2
+    const end = Math.floor(((b + 1) * frames) / buckets) * 2
+    let peak = 0
+    for (let i = start; i < end; i++) peak = Math.max(peak, Math.abs(data[i]))
+    out[b] = peak / 32768
+  }
+  return out
 }
 
 export type RecordEvent = {
@@ -144,6 +161,9 @@ export class Studio {
    */
   async armRecording(): Promise<void> {
     if (this.recording) return
+    // Silence everything first: playback would bleed from the speaker into
+    // the mic (and could even trigger the take).
+    this.stopAll()
     const pad = this.selected
     this.recordingPad = pad
     this.recording = await Recording.start(this.context, {
@@ -231,6 +251,34 @@ export class Studio {
     this.changed()
   }
 
+  /** Stops the beat and the song, fades every pad, and cuts the reverb tail. */
+  stopAll(): void {
+    this.playing = false
+    this.engine.send([Op.StopAll, 0, 0, 0])
+    this.changed(false)
+  }
+
+  /** Transport stop: halts the beat or song; sounding pads ring out. */
+  stop(): void {
+    if (this.mode === 'song') this.engine.setSongPlaying(false)
+    else if (this.playing) {
+      this.playing = false
+      this.engine.setPlaying(false)
+    }
+    this.changed(false)
+  }
+
+  /** Transport play: starts the beat from step 1 (restarting if running), or the song. */
+  play(): void {
+    if (this.mode === 'song') {
+      if (this.song) this.engine.setSongPlaying(true)
+    } else {
+      this.playing = true
+      this.engine.setPlaying(true)
+    }
+    this.changed(false)
+  }
+
   togglePlay(): void {
     if (this.mode === 'song') {
       if (!this.song) return
@@ -276,7 +324,13 @@ export class Studio {
     const data = toInterleavedInt16(buffer, this.engine.songCapacity)
     const frames = data.length / 2
     await this.engine.loadSong(data)
-    this.song = { name: file.name.replace(/\.[^.]+$/, ''), data, frames, truncated: frames < buffer.length }
+    this.song = {
+      name: file.name.replace(/\.[^.]+$/, ''),
+      data,
+      frames,
+      truncated: frames < buffer.length,
+      waveform: waveformOf(data, WAVEFORM_BUCKETS),
+    }
     this.changed(false)
   }
 

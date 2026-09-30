@@ -54,6 +54,11 @@ public:
     void set_bpm(float bpm) { sequencer_.set_bpm(bpm, now_); }
     void set_playing(bool playing) { sequencer_.set_playing(playing, now_); }
     void stop_after_steps(std::int64_t steps) { sequencer_.stop_after(steps); }
+
+    // Silence everything, e.g. before recording from the mic: stops the
+    // sequencer and song, fades out every voice, and flushes the reverb tail
+    // after fading the next block to zero. Output is silent from the block after.
+    void stop_all();
     void set_pattern_length(std::size_t steps) { sequencer_.set_length(static_cast<std::uint32_t>(steps)); }
 
     // Song. Same begin / write / commit protocol as pads, interleaved stereo.
@@ -78,6 +83,7 @@ private:
     std::int64_t now_ = 0;
     float speed_ = 1.0f;
     float master_gain_ = 0.8f;
+    bool flush_pending_ = false;
 
     Sampler sampler_;
     Sequencer sequencer_;

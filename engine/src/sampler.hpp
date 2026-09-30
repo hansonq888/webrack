@@ -42,6 +42,12 @@ public:
         v->age = ++clock_;
     }
 
+    // Fades out every sounding voice (~1.3 ms, no click).
+    void release_all() {
+        for (auto& v : voices_)
+            if (v.active && v.fade_step == 0.0f) v.fade_step = kFadeStep;
+    }
+
     // Immediately silences every voice on a pad (before its data is replaced).
     void kill_pad(std::uint32_t pad) {
         for (auto& v : voices_)
