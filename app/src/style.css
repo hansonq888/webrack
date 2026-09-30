@@ -356,7 +356,7 @@ input {
   position: relative;
   width: 100%;
   max-width: 460px;
-  padding: 18px calc(16px + var(--cheek-width)) 14px;
+  padding: 22px calc(24px + var(--cheek-width)) 24px; /* clear of the corner screws */
   border-radius: var(--r-device);
   background:
     repeating-linear-gradient(90deg, var(--brush) 0 1px, transparent 1px 3px),
@@ -477,8 +477,8 @@ input {
 /* Speaker grille: a field of drilled holes. */
 .grille {
   flex: 1;
-  max-width: 132px;
-  height: 30px;
+  max-width: 133px;
+  height: 28px; /* four whole rows of 7px holes */
   margin: 0 16px;
   background: radial-gradient(
       circle at 50% 42%,
@@ -487,7 +487,7 @@ input {
       var(--grille-rim, rgba(255, 255, 255, 0.12)) 2.1px,
       transparent 2.5px
     )
-    0 0 / 7px 7px;
+    0 0 / 7px 7px space; /* whole holes only, never clipped */
 }
 
 .lamps {
@@ -535,14 +535,16 @@ input {
 
 .device-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 12px;
   padding-top: 10px;
   border-top: 1px solid var(--ink-faint);
 }
 
 .fine-print {
+  flex: 1 1 190px;
   margin: 0;
   font-size: 0.56rem;
   line-height: 1.5;
@@ -733,10 +735,12 @@ input {
 
 .seq-head .section-label {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .seq-head .key {
-  min-width: 76px;
+  min-width: 68px;
 }
 
 /* Bar tabs: jump straight to a bar; each shows that bar's hits for the
@@ -939,6 +943,9 @@ input {
   --d: 1px;
   --face-hi: var(--latched-hi);
   --face: var(--latched);
+  /* Edge and highlight match the dark latched face, not the light cap. */
+  --edge: color-mix(in srgb, var(--latched) 60%, black);
+  --sheen: rgba(255, 255, 255, 0.1);
   --ring: inset 0 2px 5px rgba(0, 0, 0, 0.45);
   color: var(--latched-ink);
 }
@@ -1039,11 +1046,12 @@ input {
 
 /* ---- Pads ----------------------------------------------------------------------------- */
 
-.pads {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 9px;
-  padding: 10px 10px 16px;
+/* The pad well holds the pads and, below them, the tools for the selected pad. */
+.pad-well {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 10px 12px;
   border-radius: var(--r-well);
   background: linear-gradient(180deg, color-mix(in srgb, var(--well) 80%, black), var(--well) 30%);
   box-shadow:
@@ -1051,6 +1059,14 @@ input {
     inset 0 -1px 0 rgba(255, 255, 255, 0.07),
     0 1px 0 var(--panel-sheen),
     0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.pads {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+  padding-bottom: 6px; /* room for the pads' side walls */
 }
 
 .pad {
@@ -1125,7 +1141,7 @@ input {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow-wrap: break-word;
+  overflow-wrap: normal; /* break between words only */
   min-width: 0;
 }
 
@@ -1214,8 +1230,50 @@ input {
 
 .pad-tools {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: auto repeat(3, 1fr);
+  align-items: center;
   gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* A mini display naming the pad the tools act on. */
+.pad-target {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 96px;
+  max-width: 150px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  background: var(--lcd-bg);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(255, 255, 255, 0.06);
+  font-family: var(--lcd);
+  font-weight: 800;
+  font-size: calc(0.95rem * var(--lcd-scale, 1));
+  color: var(--lcd-fg);
+  text-shadow: 0 0 6px var(--lcd-glow);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pad-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.device[data-rec] .pad-target {
+  transition: color 120ms;
+}
+
+.device[data-rec='armed'] .pad-target,
+.device[data-rec='live'] .pad-target {
+  color: #ff5a4a;
+  text-shadow: 0 0 8px var(--red-glow);
 }
 
 /* ---- Steps ------------------------------------------------------------------------------ */
@@ -1363,13 +1421,13 @@ input {
 
 .machine > .m-transport {
   display: grid;
-  grid-template-columns: auto auto auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
-  gap: 10px;
+  gap: 12px 10px;
 }
 
-.m-transport #clear {
-  justify-self: end;
+.m-transport .section-label {
+  grid-column: 1 / -1;
 }
 
 .key-transport {
@@ -1475,13 +1533,24 @@ input {
 .song-transport {
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 12px;
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 6px;
+}
+
+/* Play key and waveform share the first row and the same height; the times
+   sit under the waveform only. */
+.song-timeline {
+  display: contents;
+}
+
+.song-times {
+  grid-column: 2;
 }
 
 .song-play {
   min-width: 112px;
-  min-height: 52px;
+  min-height: 46px; /* + 4px keycap side = the waveform's 50px */
   padding: 0 16px;
   gap: 8px;
   font-size: 0.78rem;
@@ -1505,16 +1574,13 @@ input {
 
 
 
-.song-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+
 
 .song-bar {
+  --inset: 6px; /* the waveform is drawn inside this padding */
   position: relative;
-  height: 46px;
-  padding: 0 6px;
+  height: 50px;
+  padding: 0 var(--inset);
   border-radius: var(--r-key);
   background: var(--well);
   box-shadow:
@@ -1534,10 +1600,10 @@ input {
 .song-head {
   position: absolute;
   top: 50%;
-  left: 0;
+  left: calc(var(--inset) + var(--progress, 0) * (100% - 2 * var(--inset)));
   width: 10px;
-  height: 52px;
-  margin: -26px 0 0 1px;
+  height: 56px;
+  margin: -28px 0 0 -5px;
   border-radius: 3px;
   background:
     linear-gradient(90deg, transparent 42%, #1b1a16 42% 58%, transparent 58%),
@@ -1566,7 +1632,8 @@ input {
 .knobs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px 6px;
+  gap: 18px 6px;
+  margin-top: 12px; /* clear of the preset keys' shadows */
 }
 
 .knob {
@@ -1776,7 +1843,7 @@ input {
 
   .device:not(.device-start) {
     max-width: 960px;
-    padding: 22px calc(22px + var(--cheek-width) * 1.5) 16px;
+    padding: 26px calc(30px + var(--cheek-width)) 26px;
   }
 
   :root[data-finish='console'] {
@@ -1791,8 +1858,7 @@ input {
     grid-template-areas:
       'screen pads'
       'qlink  pads'
-      'out    pads'
-      'transport transport'
+      'out    transport'
       'seq    seq';
     column-gap: 36px;
     row-gap: 18px;
@@ -1822,7 +1888,7 @@ input {
     grid-template-areas:
       'screen pads'
       'qlink  pads'
-      'out    pads';
+      'out    .';
   }
 
   .steps {
@@ -1838,7 +1904,7 @@ input {
 /* Phones: the BPM fader gets its own full-width row above Play and Clear. */
 @media (max-width: 520px) {
   .machine > .m-transport {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .tempo {
@@ -1847,8 +1913,17 @@ input {
     justify-content: space-between;
   }
 
-  .m-transport #clear {
-    justify-self: stretch;
+  .m-transport .section-label {
+    order: -2;
+  }
+
+  .pad-tools {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pad-target {
+    grid-column: 1 / -1;
+    max-width: none;
   }
 
   .key-transport {
@@ -1866,7 +1941,14 @@ input {
   }
 }
 
-/* Touch-only devices have no keyboard: hide the key letters on pads. */
+/* Hide the pads' key letters where they'd crowd the names (a narrow pad
+   grid) or where there's no keyboard to use them (touch-only devices). */
+@container (max-width: 420px) {
+  .pad-key {
+    display: none;
+  }
+}
+
 @media (hover: none) and (pointer: coarse) {
   .pad-key {
     display: none;

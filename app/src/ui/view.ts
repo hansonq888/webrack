@@ -118,6 +118,7 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
         <section class="m-pads">
           <div class="beat-only pad-block">
             <div class="section-label"><span>Pads</span><b>1–16</b></div>
+            <div class="pad-well">
             <div class="pads" role="group" aria-label="Pads">
               ${Array.from({ length: NUM_PADS }, (_, i) => `
                 <button class="pad" data-pad="${i}">
@@ -126,11 +127,13 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
                   <i class="pad-led"></i>
                 </button>`).join('')}
             </div>
-            <div class="pad-tools">
-              <button class="key" id="rec"><i class="rec-dot"></i> <span id="rec-label">Rec</span></button>
-              <button class="key" id="load">Load</button>
-              <button class="key" id="reset">Reset</button>
+            <div class="pad-tools" role="group" aria-label="Selected pad">
+              <span class="pad-target" aria-hidden="true"><b id="target-num"></b><span id="target-name"></span></span>
+              <button class="key key-small" id="rec"><i class="rec-dot"></i> <span id="rec-label">Rec</span></button>
+              <button class="key key-small" id="load">Load</button>
+              <button class="key key-small" id="reset">Reset</button>
               <input type="file" id="load-input" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" hidden />
+            </div>
             </div>
           </div>
 
@@ -160,6 +163,7 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
         </section>
 
         <section class="m-transport beat-only">
+          <div class="section-label"><span>Transport</span></div>
           <button class="key key-transport" id="stop" aria-label="Stop"><span class="glyph">■</span> Stop</button>
           <button class="key key-orange key-transport key-play" id="play" aria-label="Play"><span class="glyph">▶</span> Play</button>
           <div class="tempo" role="group" aria-label="Tempo">
@@ -168,12 +172,12 @@ export function mountStudio(root: HTMLElement, studio: Studio): void {
             <div id="tempo-knob"></div>
             <button class="key key-small" id="tap" aria-label="Tap tempo (T)">Tap</button>
           </div>
-          <button class="key" id="clear">Clear</button>
         </section>
 
         <section class="m-seq beat-only">
           <div class="seq-head">
-            <div class="section-label"><span>Step sequencer</span><b id="steps-pad"></b></div>
+            <div class="section-label"><span>Steps</span><b id="steps-pad"></b></div>
+            <button class="key key-small" id="clear" aria-label="Clear the pattern">Clear</button>
             <button class="key key-small" id="len" aria-label="Pattern length"></button>
           </div>
           <div class="bar-tabs" role="tablist" aria-label="Bars">
@@ -627,6 +631,16 @@ class StudioView {
     this.pads.forEach((pad, i) => pad.classList.toggle('rec-target', !!rec && i === s.recordingPad))
     $(this.root, '#reset').toggleAttribute('disabled', !s.pads[s.selected]?.custom)
 
+    // The tools strip names the pad it acts on (the recording target while recording).
+    const target = rec ? s.recordingPad : s.selected
+    const targetName = s.pads[target]?.name ?? ''
+    $(this.root, '#target-num').textContent = String(target + 1).padStart(2, '0')
+    $(this.root, '#target-name').textContent = targetName
+    const padLabel = `pad ${target + 1} (${targetName})`
+    $(this.root, '#rec').setAttribute('aria-label', rec === 'live' ? `Stop recording ${padLabel}` : rec === 'armed' ? `Cancel recording ${padLabel}` : `Record onto ${padLabel}`)
+    $(this.root, '#load').setAttribute('aria-label', `Load an audio file onto ${padLabel}`)
+    $(this.root, '#reset').setAttribute('aria-label', `Reset ${padLabel} to the kit sound`)
+
     if (s.song) {
       $(this.root, '#song-name').textContent = s.song.name
       $(this.root, '#song-hint').textContent = `${formatTime(s.song.frames / s.sampleRate)} · tap to load another`
@@ -661,7 +675,7 @@ class StudioView {
       this.spectrum.draw(colors.spectrum, st.songPlaying)
       this.waveform.draw(s.song?.waveform ?? null, progress, colors.wave)
     }
-    $(this.root, '#song-head').style.left = `${progress * 100}%`
+    $(this.root, '#song-bar').style.setProperty('--progress', String(progress))
     const songPlay = $(this.root, '#song-play')
     songPlay.classList.toggle('playing', st.songPlaying)
     songPlay.classList.toggle('lit', st.songPlaying)
