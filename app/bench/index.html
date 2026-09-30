@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRack Bench</title>
+  </head>
+  <body>
+    <main class="bench">
+      <a class="wordmark" href="/">webrack</a>
+      <h1>Engine benchmark</h1>
+      <p class="lede">
+        The engine under the worst case the app can produce: 16 voices always sounding and being stolen, a song on
+        top, 0.8× speed, EQ and reverb. Each 128-frame block must be ready in 2.67 ms.
+      </p>
+      <dl id="env"></dl>
+
+      <section>
+        <h2>C++/WASM vs JavaScript</h2>
+        <p class="note">
+          In a Web Worker. The JavaScript engine is a line-by-line port of the C++ with the same scenario and inputs.
+        </p>
+        <div class="controls">
+          <label>Audio per engine
+            <select id="minutes">
+              <option value="1">1 min</option>
+              <option value="3" selected>3 min</option>
+              <option value="10">10 min</option>
+            </select>
+          </label>
+          <button id="run-worker">Run</button>
+        </div>
+        <p class="status" id="worker-status"></p>
+        <div id="worker-results"></div>
+      </section>
+
+      <section>
+        <h2>On the real audio thread</h2>
+        <p class="note">The WASM engine inside an AudioWorklet, in real time. Output is silent.</p>
+        <div class="controls"><button id="run-worklet">Run for 30 s</button></div>
+        <p class="status" id="worklet-status"></p>
+        <div id="worklet-results"></div>
+      </section>
+
+      <button class="copy" id="copy">Copy results as JSON</button>
+    </main>
+    <script type="module" src="/src/bench/page.ts"></script>
+  </body>
+</html>

@@ -1,13 +1,13 @@
 // Soak benchmark of the shipped engine.wasm in V8 (Node), same scenario as
 // bench.cpp: 16 voices retriggered and stolen, song on top, speed 0.8x, EQ,
-// reverb. Usage: node engine/tests/wasm-bench.mjs [minutes]
+// reverb. Usage: node engine/tests/wasm-bench.mjs [minutes] [path/to/engine.wasm]
 
 import { readFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 
 const minutes = Number(process.argv[2] ?? 10)
 const rate = 48000
-const wasm = new URL('../../app/public/engine.wasm', import.meta.url)
+const wasm = process.argv[3] ?? new URL('../../app/public/engine.wasm', import.meta.url)
 const { exports: e } = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(wasm)), {})
 e._initialize()
 e.wr_init(rate)

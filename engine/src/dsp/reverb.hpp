@@ -1,11 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 
 #include "../config.hpp"
+#include "simd.hpp"
 
 namespace webrack::dsp {
 
@@ -14,6 +16,13 @@ namespace webrack::dsp {
 // the right channel's delays offset for stereo width. In front: a high-pass
 // (lows stay dry, so 808s don't turn the tail to mud) and a pre-delay line.
 // All buffers are fixed-size members; nothing allocates.
+//
+// Processing is block-wise: the input stage runs over the block, then each
+// comb and allpass runs over the whole block in turn. Every delay line is
+// far longer than 4 samples, so four consecutive reads never depend on each
+// other's writes, and loads, stores and most of the math run 4 wide (SIMD).
+// Per sample the arithmetic is the same as a sample-by-sample loop, so the
+// output is identical.
 class Reverb {
 public:
     enum Param { Size = 0, Damping = 1, PreDelayMs = 2, Mix = 3 };
@@ -69,39 +78,8 @@ public:
 
     // In place. Equal-power dry/wet: at mix 0 the output is exactly the input.
     void process(float* left, float* right, std::size_t n) {
-        const float mix_step = (mix_target_ - mix_) / static_cast<float>(n);
-        for (std::size_t i = 0; i < n; ++i) {
-            // High-pass (one-pole) and pre-delay the mono input.
-            const float mono = (left[i] + right[i]) * kInputGain;
-            hp_state_ = hp_coeff_ * (hp_state_ + mono - hp_prev_);
-            hp_prev_ = mono;
-            predelay_[predelay_write_] = hp_state_;
-            std::size_t read = predelay_write_ + kPreDelayCapacity - predelay_frames_;
-            if (read >= kPreDelayCapacity) read -= kPreDelayCapacity;
-            const float in = predelay_[read] + kAntiDenormal;
-            if (++predelay_write_ == kPreDelayCapacity) predelay_write_ = 0;
-
-            float wet[2];
-            for (std::size_t ch = 0; ch < 2; ++ch) {
-                float acc = 0.0f;
-                for (auto& c : combs_[ch]) acc += c.process(in, feedback_, damp_);
-                for (auto& a : allpasses_[ch]) acc = a.process(acc);
-                wet[ch] = acc * kWetGain;
-            }
-
-            mix_ += mix_step;
-            const float angle = mix_ * (std::numbers::pi_v<float> * 0.5f);
-            const float dry_gain = mix_ == 0.0f ? 1.0f : std::cos(angle);
-            float wet_gain = mix_ == 0.0f ? 0.0f : std::sin(angle);
-            if (flush_pending_) wet_gain *= 1.0f - static_cast<float>(i + 1) / static_cast<float>(n);
-            left[i] = left[i] * dry_gain + wet[0] * wet_gain;
-            right[i] = right[i] * dry_gain + wet[1] * wet_gain;
-        }
-        mix_ = mix_target_;
-        if (flush_pending_) {
-            clear();
-            flush_pending_ = false;
-        }
+        for (std::size_t done = 0; done < n; done += kBlockSize)
+            process_block(left + done, right + done, std::min(kBlockSize, n - done));
     }
 
 private:
@@ -121,6 +99,59 @@ private:
     static constexpr float kAntiDenormal = 1e-18f;
 
     static float clamp01(float v) { return std::fmax(0.0f, std::fmin(1.0f, v)); }
+
+    // Walks n frames of a circular buffer from `index` as contiguous runs (the
+    // buffer wraps at most once per run), calling fn(offset, run), then
+    // leaves `index` just past the last frame.
+    template <typename Fn>
+    static void for_each_run(std::size_t& index, std::size_t length, std::size_t n, Fn fn) {
+        for (std::size_t offset = 0; offset < n;) {
+            const std::size_t run = std::min(n - offset, length - index);
+            fn(offset, run);
+            offset += run;
+            index += run;
+            if (index == length) index = 0;
+        }
+    }
+
+    void process_block(float* left, float* right, std::size_t n) {
+        // 1. Input: mono, one-pole high-pass, pre-delay. A recursion, so scalar.
+        for (std::size_t i = 0; i < n; ++i) {
+            const float mono = (left[i] + right[i]) * kInputGain;
+            hp_state_ = hp_coeff_ * (hp_state_ + mono - hp_prev_);
+            hp_prev_ = mono;
+            predelay_[predelay_write_] = hp_state_;
+            std::size_t read = predelay_write_ + kPreDelayCapacity - predelay_frames_;
+            if (read >= kPreDelayCapacity) read -= kPreDelayCapacity;
+            in_[i] = predelay_[read] + kAntiDenormal;
+            if (++predelay_write_ == kPreDelayCapacity) predelay_write_ = 0;
+        }
+
+        // 2. The tank: parallel combs summed, then allpasses in series.
+        for (std::size_t ch = 0; ch < 2; ++ch) {
+            float* wet = wet_[ch].data();
+            std::fill(wet, wet + n, 0.0f);
+            for (auto& c : combs_[ch]) c.process(in_.data(), wet, n, feedback_, damp_);
+            for (auto& a : allpasses_[ch]) a.process(wet, n);
+        }
+
+        // 3. Mix, gliding toward the target mix across the block.
+        const float mix_step = (mix_target_ - mix_) / static_cast<float>(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            mix_ += mix_step;
+            const float angle = mix_ * (std::numbers::pi_v<float> * 0.5f);
+            const float dry_gain = mix_ == 0.0f ? 1.0f : std::cos(angle);
+            float wet_gain = mix_ == 0.0f ? 0.0f : std::sin(angle);
+            if (flush_pending_) wet_gain *= 1.0f - static_cast<float>(i + 1) / static_cast<float>(n);
+            left[i] = left[i] * dry_gain + wet_[0][i] * kWetGain * wet_gain;
+            right[i] = right[i] * dry_gain + wet_[1][i] * kWetGain * wet_gain;
+        }
+        mix_ = mix_target_;
+        if (flush_pending_) {
+            clear();
+            flush_pending_ = false;
+        }
+    }
     static std::size_t scaled(std::size_t tuning, float scale) {
         return static_cast<std::size_t>(static_cast<float>(tuning) * scale);
     }
@@ -136,12 +167,28 @@ private:
             store = 0.0f;
             buf.fill(0.0f);
         }
-        float process(float in, float feedback, float damp) {
-            const float out = buf[index];
-            store = out * (1.0f - damp) + store * damp;
-            buf[index] = in + store * feedback;
-            if (++index == length) index = 0;
-            return out;
+        // Adds this comb's output for n frames of `in` into `acc`.
+        void process(const float* in, float* acc, std::size_t n, float feedback, float damp) {
+            for_each_run(index, length, n, [&](std::size_t offset, std::size_t run) {
+                float* b = buf.data() + index;
+                const float* x = in + offset;
+                float* y = acc + offset;
+                std::size_t k = 0;
+                for (; k + 4 <= run; k += 4) {
+                    const f32x4 out = load4(b + k);
+                    // The damping low-pass is a recursion: serial through the lanes.
+                    f32x4 damped = out * (1.0f - damp);
+                    for (int lane = 0; lane < 4; ++lane) damped[lane] = store = damped[lane] + store * damp;
+                    store4(b + k, load4(x + k) + damped * feedback);
+                    store4(y + k, load4(y + k) + out);
+                }
+                for (; k < run; ++k) {
+                    const float out = b[k];
+                    store = out * (1.0f - damp) + store * damp;
+                    b[k] = x[k] + store * feedback;
+                    y[k] += out;
+                }
+            });
         }
     };
 
@@ -154,17 +201,33 @@ private:
             index = 0;
             buf.fill(0.0f);
         }
-        float process(float in) {
-            const float delayed = buf[index];
-            buf[index] = in + delayed * 0.5f;
-            if (++index == length) index = 0;
-            return delayed - in;
+        // In place over n frames.
+        void process(float* io, std::size_t n) {
+            for_each_run(index, length, n, [&](std::size_t offset, std::size_t run) {
+                float* b = buf.data() + index;
+                float* x = io + offset;
+                std::size_t k = 0;
+                for (; k + 4 <= run; k += 4) {
+                    const f32x4 delayed = load4(b + k);
+                    const f32x4 in = load4(x + k);
+                    store4(b + k, in + delayed * 0.5f);
+                    store4(x + k, delayed - in);
+                }
+                for (; k < run; ++k) {
+                    const float delayed = b[k];
+                    const float in = x[k];
+                    b[k] = in + delayed * 0.5f;
+                    x[k] = delayed - in;
+                }
+            });
         }
     };
 
     std::array<std::array<Comb, kCombs>, 2> combs_{};
     std::array<std::array<Allpass, kAllpasses>, 2> allpasses_{};
     std::array<float, kPreDelayCapacity> predelay_{};
+    std::array<float, kBlockSize> in_{};                         // the tank's input, one block
+    std::array<std::array<float, kBlockSize>, 2> wet_{};         // the tank's output per channel
     std::size_t predelay_write_ = 0;
     std::size_t predelay_frames_ = 0;
     float sample_rate_ = 48000.0f;

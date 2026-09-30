@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine tests (native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Clang, like the WASM build: same compiler front end and vector extensions.
+      - run: engine/test.sh
+        env:
+          CXX: clang++
+
+  wasm:
+    name: engine.wasm is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.10
+      - run: engine/build.sh
+      # The build is reproducible, so a rebuilt engine.wasm that differs from
+      # the committed one means someone changed C++ without rebuilding.
+      - run: git diff --exit-code --stat app/public/engine.wasm
+
+  app:
+    name: App typecheck, build and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test

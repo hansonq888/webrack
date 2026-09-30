@@ -1,6 +1,7 @@
 // Native tests for the engine (same C++ as the wasm build).
 // Build and run: engine/test.sh
 
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -289,6 +290,67 @@ static void test_deck_effects() {
     CHECK(differ == 0, "width 0 left %zu samples where L != R", differ);
 }
 
+// The SIMD paths must produce exactly what the scalar paths do. Feeding one
+// frame per call forces every loop down its scalar tail; 128-frame blocks
+// take the 4-wide path. The two outputs must match bit for bit.
+static std::vector<float> noise(std::size_t n, unsigned seed) {
+    std::vector<float> out(n);
+    for (auto& x : out) {
+        seed = seed * 1103515245u + 12345u;
+        x = static_cast<float>(seed >> 16) / 65536.0f - 0.5f;
+    }
+    return out;
+}
+
+static void test_sampler_simd_matches_scalar() {
+    std::printf("sampler: SIMD path == scalar path, bit for bit\n");
+    const auto data = noise(20'000, 3);
+    std::array<PadSample, kNumPads> pads{};
+    pads[0] = {data.data(), static_cast<std::uint32_t>(data.size())};
+    static Sampler blocked, framed;
+    blocked.reset();
+    framed.reset();
+    std::size_t diffs = 0;
+    for (std::size_t b = 0; b < 240; ++b) {
+        // A retrigger partway through exercises the choke fade as well.
+        if (b == 0 || b == 90) {
+            blocked.trigger(0, 0.7f, pads[0]);
+            framed.trigger(0, 0.7f, pads[0]);
+        }
+        std::array<float, kBlockSize> bl{}, br{}, fl{}, fr{};
+        blocked.render(pads, 0.8, bl.data(), br.data(), 0, kBlockSize);
+        for (std::size_t i = 0; i < kBlockSize; ++i) framed.render(pads, 0.8, fl.data(), fr.data(), i, i + 1);
+        for (std::size_t i = 0; i < kBlockSize; ++i) diffs += bl[i] != fl[i] || br[i] != fr[i];
+    }
+    CHECK(diffs == 0, "%zu samples differ", diffs);
+}
+
+static void test_reverb_simd_matches_scalar() {
+    std::printf("reverb: SIMD path == scalar path, bit for bit\n");
+    static dsp::Reverb blocked, framed;
+    for (auto* r : {&blocked, &framed}) {
+        r->init(kRate);
+        r->set(dsp::Reverb::Size, 0.9f);
+        r->set(dsp::Reverb::Damping, 0.6f);
+        r->set(dsp::Reverb::PreDelayMs, 40.0f);
+        r->set(dsp::Reverb::Mix, 0.45f);
+    }
+    // One silent block lets both glide to the target mix (the glide is per call).
+    std::array<float, kBlockSize> zl{}, zr{};
+    blocked.process(zl.data(), zr.data(), kBlockSize);
+    for (std::size_t i = 0; i < kBlockSize; ++i) framed.process(&zl[i], &zr[i], 1);
+
+    const auto left = noise(48'000, 5), right = noise(48'000, 9);
+    std::vector<float> bl = left, br = right, fl = left, fr = right;
+    std::size_t diffs = 0;
+    for (std::size_t at = 0; at + kBlockSize <= left.size(); at += kBlockSize) {
+        blocked.process(&bl[at], &br[at], kBlockSize);
+        for (std::size_t i = at; i < at + kBlockSize; ++i) framed.process(&fl[i], &fr[i], 1);
+    }
+    for (std::size_t i = 0; i < bl.size(); ++i) diffs += bl[i] != fl[i] || br[i] != fr[i];
+    CHECK(diffs == 0, "%zu samples differ", diffs);
+}
+
 static void test_process_never_allocates() {
     std::printf("no allocations in process()\n");
     Engine& e = g_engine;
@@ -318,6 +380,8 @@ int main() {
     test_stop_all_silences_everything();
     test_restart_keeps_downbeat();
     test_deck_effects();
+    test_sampler_simd_matches_scalar();
+    test_reverb_simd_matches_scalar();
     test_process_never_allocates();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);

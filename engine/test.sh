@@ -6,12 +6,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
 
-CXXFLAGS=(-std=c++20 -O2 -Wall -Wextra -fno-exceptions)
+# -ffp-contract=off: no fused multiply-add, matching WebAssembly's float
+# semantics, so native results are bit-identical to the shipped engine.wasm.
+CXXFLAGS=(-std=c++20 -O2 -Wall -Wextra -fno-exceptions -ffp-contract=off)
 
 if [[ "${1:-}" == "bench" ]]; then
-  c++ "${CXXFLAGS[@]}" -O3 tests/bench.cpp src/engine.cpp -o build/bench
+  "${CXX:-c++}" "${CXXFLAGS[@]}" -O3 tests/bench.cpp src/engine.cpp -o build/bench
   ./build/bench "${@:2}"
 else
-  c++ "${CXXFLAGS[@]/-fno-exceptions/}" tests/engine_test.cpp src/engine.cpp -o build/engine_test
+  "${CXX:-c++}" "${CXXFLAGS[@]/-fno-exceptions/}" tests/engine_test.cpp src/engine.cpp -o build/engine_test
   ./build/engine_test
 fi

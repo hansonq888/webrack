@@ -6,6 +6,7 @@
 
 #include "config.hpp"
 #include "dsp/interp.hpp"
+#include "dsp/simd.hpp"
 
 namespace webrack {
 
@@ -54,27 +55,21 @@ public:
             if (v.active && v.pad == pad) v.active = false;
     }
 
-    // Adds voices into left/right over [begin, end) at playback `rate`.
+    // Adds voices into left/right over [begin, end) at playback `rate`. Voices
+    // are mono, so they sum into one buffer that is then added to both sides.
     void render(const std::array<PadSample, kNumPads>& pads, double rate, float* left, float* right,
                 std::size_t begin, std::size_t end) {
+        const std::size_t n = end - begin;
+        std::array<float, kBlockSize> mono{};
+        bool any = false;
         for (auto& v : voices_) {
             if (!v.active) continue;
-            const PadSample& s = pads[v.pad];
-            const auto at = [&s](std::int64_t k) {
-                return k >= 0 && k < static_cast<std::int64_t>(s.length) ? s.data[k] : 0.0f;
-            };
-            for (std::size_t i = begin; i < end; ++i) {
-                const float x = dsp::hermite(at, v.pos) * v.gain * v.fade;
-                left[i] += x;
-                right[i] += x;
-                v.pos += rate;
-                if (v.fade_step != 0.0f) v.fade -= v.fade_step;
-                if (v.pos >= s.length || v.fade <= 0.0f) {
-                    v.active = false;
-                    break;
-                }
-            }
+            any = true;
+            render_voice(v, pads[v.pad], rate, mono.data(), n);
         }
+        if (!any) return;
+        dsp::add_into(left + begin, mono.data(), n);
+        dsp::add_into(right + begin, mono.data(), n);
     }
 
     std::size_t sounding_count() const {
@@ -96,6 +91,54 @@ private:
         float fade = 1.0f;
         float fade_step = 0.0f;
     };
+
+    // One voice into `out` for n frames.
+    //
+    // Fast path (SIMD): a voice that isn't fading and whose reads over the
+    // whole span stay inside the sample, so there are no bounds checks and no
+    // chance of it ending mid-span. Four output frames at a time: the four
+    // read positions are gathered into vector lanes, and the Hermite
+    // polynomial runs as f32x4 math. Positions still advance one frame at a
+    // time in double, exactly as the scalar path does, so both paths produce
+    // the same numbers.
+    //
+    // Everything else (fades, the first and last few frames of a sample) takes
+    // the scalar path.
+    static void render_voice(Voice& v, const PadSample& s, double rate, float* out, std::size_t n) {
+        std::size_t i = 0;
+        const double last_pos = v.pos + rate * static_cast<double>(n > 0 ? n - 1 : 0);
+        const bool fast = v.fade_step == 0.0f && v.pos >= 1.0 &&
+                          static_cast<std::int64_t>(last_pos) + 2 < static_cast<std::int64_t>(s.length);
+        if (fast) {
+            const float* d = s.data;
+            const dsp::f32x4 gain = dsp::splat(v.gain * v.fade);
+            for (; i + 4 <= n; i += 4) {
+                dsp::f32x4 xm1, x0, x1, x2, t;
+                for (int k = 0; k < 4; ++k) {
+                    const auto j = static_cast<std::int64_t>(v.pos);
+                    t[k] = static_cast<float>(v.pos - static_cast<double>(j));
+                    xm1[k] = d[j - 1];
+                    x0[k] = d[j];
+                    x1[k] = d[j + 1];
+                    x2[k] = d[j + 2];
+                    v.pos += rate;
+                }
+                dsp::store4(&out[i], dsp::load4(&out[i]) + dsp::hermite_poly(xm1, x0, x1, x2, t) * gain);
+            }
+        }
+        const auto at = [&s](std::int64_t k) {
+            return k >= 0 && k < static_cast<std::int64_t>(s.length) ? s.data[k] : 0.0f;
+        };
+        for (; i < n; ++i) {
+            out[i] += dsp::hermite(at, v.pos) * v.gain * v.fade;
+            v.pos += rate;
+            if (v.fade_step != 0.0f) v.fade -= v.fade_step;
+            if (v.pos >= s.length || v.fade <= 0.0f) {
+                v.active = false;
+                break;
+            }
+        }
+    }
 
     Voice* oldest_sounding() {
         Voice* oldest = nullptr;

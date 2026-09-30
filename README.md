@@ -1,5 +1,7 @@
 # WebRack
 
+[![CI](https://github.com/hansonq888/webrack/actions/workflows/ci.yml/badge.svg)](https://github.com/hansonq888/webrack/actions/workflows/ci.yml)
+
 A beat machine and slowed + reverb tool that runs in the browser. No install, no account, and your audio never leaves your device.
 
 **Try it:** [webrack.hansonqin.com](https://webrack.hansonqin.com)
@@ -34,6 +36,7 @@ Some things I cared about:
 - **Sample-accurate sequencing.** The engine splits each block at the exact sample where a step lands, so timing doesn't drift or snap to block boundaries. A test checks every hit's sample index across different tempos and speeds.
 - **The WASM has no imports.** It's built with `-sSTANDALONE_WASM` and a fixed memory size, and the worklet instantiates it directly without any Emscripten JS glue.
 - **Export uses the same code.** Exporting runs the same worklet and engine inside an `OfflineAudioContext`, so the file sounds exactly like what you heard.
+- **SIMD where the time goes.** Profiling showed the sampler's interpolation and the reverb's delay lines were the hot spots, so both run 4 samples at a time with WebAssembly SIMD128. The output is bit-identical to the scalar code, and a test checks that.
 
 The DSP I wrote for this project:
 - Freeverb-style reverb with pre-delay and an input high-pass.
@@ -45,17 +48,32 @@ The DSP I wrote for this project:
 
 ## Is C++ actually faster here?
 
-I wanted to check this instead of just assuming it, so I ported the engine line by line to TypeScript and ran both on the same inputs. The outputs match to within 76 dB below the signal. Results are from 10 minutes of audio on an M5 Pro in Node 22, 3 runs:
+I wanted to check this instead of just assuming it, so I ported the engine line by line to TypeScript and ran both on the same inputs. The outputs match to within 76 dB below the signal. The scenario is the worst case the app can produce: 16 voices always sounding and being stolen, a song on top, 0.8× speed, EQ and reverb.
+
+**In Node 22** (10 minutes of audio per engine, 3 runs, Apple M5 Pro):
 
 | | median block time | throughput |
 |---|---|---|
-| C++ → WASM | 11.1 to 11.4 µs | 210 to 233× real time |
-| JavaScript | 19.2 to 19.3 µs | 126 to 134× real time |
+| C++ → WASM (SIMD) | 8.0 to 8.2 µs | 327 to 330× real time |
+| C++ → WASM (before SIMD) | 11.1 to 11.4 µs | 210 to 233× real time |
+| JavaScript | 18.5 to 18.7 µs | 147 to 148× real time |
 
-WASM was about **1.7× faster** in every run. To be honest, both are way under the 2.7 ms budget on a laptop. The difference matters more on slower phones and for heavier DSP, which is where I want to take this next.
+WASM is now **2.2× faster than JavaScript** in throughput. It was 1.7× before SIMD, and SIMD alone made the engine 1.35× faster.
+
+**In the browser.** The [`/bench`](https://webrack.hansonqin.com/bench/) page runs the same benchmark in your browser. It has two modes:
+- **Web Worker:** WASM vs JavaScript. In Chrome 152 the mean block time was 7.8 µs for WASM and 16.2 µs for JavaScript, which is 2.1×.
+- **Real audio thread:** the engine inside an AudioWorklet, in real time. Chrome gives AudioWorklets no timer, so a Web Worker spins an atomic counter in a `SharedArrayBuffer` and the worklet reads it around each render call. That is about 9 ns resolution, calibrated against `performance.now()`. Over 30 s in Chrome 152 the median was 9.1 µs and the p99 20 µs, with 0 of 11,250 blocks over budget.
+
+To be honest, both engines are far under the 2.7 ms budget on a laptop. The difference matters more on slower phones and for heavier DSP.
+
+**SIMD notes.** Compiler auto-vectorization gained nothing, because the hot loops have feedback. So I restructured them by hand:
+- **Reverb:** each comb and allpass filter now processes a whole block before the next filter starts. Every delay line is over 200 samples long, so 4 neighboring samples never depend on each other, and they are loaded, computed and stored together.
+- **Sampler:** each voice interpolates 4 output samples at once, with the 4 read positions gathered into one vector.
+
+The shipped binary has 55 `v128.load`, 73 `v128.store` and 61 `f32x4` add/mul instructions, and none before. Native builds use `-ffp-contract=off` so their float math matches WASM exactly, which is what lets a native test prove the SIMD and scalar paths agree bit for bit.
 
 Other numbers:
-- Native worst-case chain: p99 of 13 µs per block (0.5% of the budget), with 0 blocks over budget in a 10-minute soak test.
+- Native worst-case chain: p50 6.8 µs, p99 11.1 µs per block (0.4% of the budget), with 0 blocks over budget in a 10-minute soak test.
 - Exporting a 3-minute slowed + reverb song takes under 1 second.
 - The whole app (JS, CSS and WASM) is about 60 KB gzipped, not counting fonts.
 
@@ -68,11 +86,13 @@ cd app && npm install && npm run dev   # app on localhost
 cd engine && ./test.sh                 # native engine tests
 cd engine && ./test.sh bench           # 10-minute soak benchmark
 cd engine && ./build.sh                # rebuild app/public/engine.wasm
-cd app && npm run bench                # JS vs WASM benchmark
+cd app && npm run bench                # JS vs WASM benchmark in Node
 ```
+
+The in-browser benchmark is at `/bench/` on the dev server. CI runs the native tests, rebuilds `engine.wasm` to check the committed one is current, and type-checks, builds and tests the app.
 
 ## What's next
 
 - Pitch-preserving time-stretch (phase vocoder), so slowing a song keeps its key.
-- Hand-written SIMD for the reverb and voices.
-- A `/bench` page to compare Chrome, Safari and Firefox, and to test on phones.
+- Run `/bench` on Safari, Firefox and a phone, and publish the numbers.
+- SIMD for the EQ, by running the left and right channels' filters side by side.

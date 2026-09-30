@@ -16,7 +16,7 @@ fi
 
 emcc src/engine.cpp src/wasm_api.cpp \
   -std=c++20 -O3 -Wall -Wextra \
-  -fno-exceptions -fno-rtti \
+  -fno-exceptions -fno-rtti -msimd128 \
   -sSTANDALONE_WASM --no-entry \
   -sINITIAL_MEMORY=112MB -sALLOW_MEMORY_GROWTH=0 -sSTACK_SIZE=64KB \
   -o "$OUT"
