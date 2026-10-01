@@ -15,6 +15,18 @@ jobs:
         env:
           CXX: clang++
 
+  spsc:
+    name: SPSC queue (ThreadSanitizer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ThreadSanitizer can't map its shadow memory with the runner's default
+      # address-space randomization; lower it for this job.
+      - run: sudo sysctl vm.mmap_rnd_bits=28
+      - run: engine/test.sh spsc
+        env:
+          CXX: clang++
+
   wasm:
     name: engine.wasm is up to date
     runs-on: ubuntu-latest

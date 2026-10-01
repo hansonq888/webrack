@@ -72,6 +72,8 @@ To be honest, both engines are far under the 2.7 ms budget on a laptop. The diff
 
 The shipped binary has 55 `v128.load`, 73 `v128.store` and 61 `f32x4` add/mul instructions, and none before. Native builds use `-ffp-contract=off` so their float math matches WASM exactly, which is what lets a native test prove the SIMD and scalar paths agree bit for bit.
 
+**Lock-free queue in C++.** `engine/src/spsc_queue.hpp` is a single-producer single-consumer ring buffer with `std::atomic` release/acquire indices on separate cache lines. Its tests include two-thread stress runs of up to 50 million items, run under ThreadSanitizer in CI; optimized, it moves 17.5 million items a second. To choose the padding I measured false sharing directly (`engine/test.sh cacheline`): two threads writing counters less than 64 bytes apart were 6.9× slower per write than counters on separate lines. macOS reports a 128-byte line, but 64 was enough on an M5. The browser's ring (`ring.ts`) uses the same algorithm with JavaScript `Atomics`, which are sequentially consistent, and now puts its head and tail on separate 128-byte lines too.
+
 Other numbers:
 - Native worst-case chain: p50 6.8 µs, p99 11.1 µs per block (0.4% of the budget), with 0 blocks over budget in a 10-minute soak test.
 - Exporting a 3-minute slowed + reverb song takes under 1 second.
@@ -85,6 +87,8 @@ You need Node 22+. Rebuilding the engine also needs [Emscripten](https://emscrip
 cd app && npm install && npm run dev   # app on localhost
 cd engine && ./test.sh                 # native engine tests
 cd engine && ./test.sh bench           # 10-minute soak benchmark
+cd engine && ./test.sh spsc            # lock-free queue, under ThreadSanitizer too
+cd engine && ./test.sh cacheline       # false-sharing benchmark
 cd engine && ./build.sh                # rebuild app/public/engine.wasm
 cd app && npm run bench                # JS vs WASM benchmark in Node
 ```
