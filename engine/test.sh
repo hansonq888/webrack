@@ -4,6 +4,7 @@
 #   ./test.sh bench      10-minute soak benchmark of the full chain
 #   ./test.sh spsc       SPSC queue tests: under ThreadSanitizer, then optimized
 #   ./test.sh cacheline  false-sharing benchmark
+#   ./test.sh asan       engine tests under AddressSanitizer + UndefinedBehaviorSanitizer
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
@@ -24,6 +25,15 @@ elif [[ "${1:-}" == "spsc" ]]; then
   "${CXX:-c++}" -std=c++20 -O2 -Wall -Wextra tests/spsc_test.cpp -o build/spsc_test
   echo "== optimized =="
   ./build/spsc_test
+elif [[ "${1:-}" == "asan" ]]; then
+  # AddressSanitizer catches out-of-bounds reads and writes (the SIMD sampler
+  # gathers four taps per lane), use-after-free and leaks; UBSan catches
+  # undefined behavior such as signed overflow and bad shifts. Any report
+  # fails the run.
+  "${CXX:-c++}" "${CXXFLAGS[@]/-fno-exceptions/}" -O1 -g -fno-omit-frame-pointer \
+    -fsanitize=address,undefined -fno-sanitize-recover=all \
+    tests/engine_test.cpp src/engine.cpp -o build/engine_test_asan
+  ./build/engine_test_asan
 elif [[ "${1:-}" == "cacheline" ]]; then
   "${CXX:-c++}" -std=c++20 -O2 -Wall -Wextra tests/false_sharing.cpp -o build/false_sharing
   ./build/false_sharing

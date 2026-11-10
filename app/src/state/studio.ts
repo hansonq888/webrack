@@ -1,4 +1,6 @@
 import { EngineClient, renderOffline } from '../engine/client'
+import { LoadShedder } from '../engine/load-shedder'
+import { readPlaybackStats } from '../engine/playback-stats'
 import { Op, ReverbParam, type Command } from '../engine/protocol'
 import { DEMO_BPM, DEMO_KIT, DEMO_PATTERN } from '../audio/kit'
 import { decodeFile, resample, toInterleavedInt16, toMono } from '../audio/decode'
@@ -138,14 +140,23 @@ export class Studio {
   recordingPad = 0
   onChange: () => void = () => {}
   onRecordEvent: (event: RecordEvent) => void = () => {}
+  /** The audio engine crashed and was restarted with the current state (or gave up). */
+  onEngineRestart: (recovered: boolean) => void = () => {}
+  /** The voice cap changed to shed load (below 16) or recovered (back to 16). */
+  onLoadChange: (voices: number) => void = () => {}
+  /** Output underruns since the app started; null where the browser doesn't report them. */
+  underruns: number | null = null
 
   readonly context: AudioContext
   readonly engine: EngineClient
   private saveTimer: ReturnType<typeof setTimeout> | undefined
+  private crashTimes: number[] = []
+  private readonly shedder = new LoadShedder()
 
   private constructor(context: AudioContext, engine: EngineClient) {
     this.context = context
     this.engine = engine
+    engine.onCrash = () => void this.recoverEngine()
   }
 
   /** Must run inside a user gesture (iOS won't start audio otherwise). */
@@ -160,6 +171,7 @@ export class Studio {
 
     const studio = new Studio(context, engine)
     await studio.restore()
+    studio.monitorOutput()
     return studio
   }
 
@@ -289,15 +301,7 @@ export class Studio {
     this.vibe = { ...FLAT_VIBE }
     this.level = DEFAULT_LEVEL
     this.selected = 0
-    const commands: Command[] = [
-      [Op.ClearPattern, 0, 0, 0],
-      [Op.PatternLength, 16, 0, 0],
-      [Op.Bpm, 0, 0, this.bpm],
-      [Op.MasterGain, 0, 0, masterGain(this.level)],
-      ...vibeCommands(this.vibe),
-    ]
-    this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
-    await this.engine.applyNow(commands)
+    await this.engine.applyNow([[Op.ClearPattern, 0, 0, 0], ...this.settingsCommands()])
     this.changed()
   }
 
@@ -419,7 +423,7 @@ export class Studio {
   async export(): Promise<ExportResult> {
     const sr = this.sampleRate
     const tail = Math.round(EXPORT_TAIL_SECONDS * sr)
-    const commands: Command[] = [[Op.MasterGain, 0, 0, masterGain(this.level)], ...vibeCommands(this.heardVibe())]
+    const commands = this.settingsCommands()
     let frames: number
     let song: Int16Array | null = null
 
@@ -432,13 +436,7 @@ export class Studio {
       const steps = EXPORT_LOOPS * this.stepCount
       const stepFrames = (sr * 60) / this.bpm / 4 / this.vibe.speed
       frames = Math.ceil(steps * stepFrames) + tail
-      this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
-      commands.push(
-        [Op.PatternLength, this.stepCount, 0, 0],
-        [Op.Bpm, 0, 0, this.bpm],
-        [Op.Playing, 1, 0, 0],
-        [Op.StopAfterSteps, steps, 0, 0],
-      )
+      commands.push([Op.Playing, 1, 0, 0], [Op.StopAfterSteps, steps, 0, 0])
     }
 
     const t0 = performance.now()
@@ -493,14 +491,68 @@ export class Studio {
       for (const [pad, steps] of Object.entries(DEMO_PATTERN)) for (const s of steps) this.pattern[Number(pad)][s] = true
     }
 
+    await this.engine.applyNow(this.settingsCommands())
+  }
+
+  /** Commands that bring a fresh engine to the current settings and pattern (not the transport). */
+  private settingsCommands(): Command[] {
     const commands: Command[] = [
       [Op.MasterGain, 0, 0, masterGain(this.level)],
       [Op.PatternLength, this.stepCount, 0, 0],
       [Op.Bpm, 0, 0, this.bpm],
+      [Op.MaxVoices, this.shedder.voices, 0, 0],
       ...vibeCommands(this.heardVibe()),
     ]
     this.pattern.forEach((row, pad) => row.forEach((on, step) => on && commands.push([Op.SetStep, pad, step, 1])))
-    await this.engine.applyNow(commands)
+    return commands
+  }
+
+  /**
+   * Watches the browser's underrun count (where it reports one) and sheds
+   * load when glitches cluster: the voice cap steps down, then back up once
+   * the output has been clean for a while (see LoadShedder).
+   */
+  private monitorOutput(): void {
+    const baseline = readPlaybackStats(this.context)
+    if (!baseline) return
+    const start = baseline.underrunEvents
+    this.underruns = 0
+    setInterval(() => {
+      const stats = readPlaybackStats(this.context)
+      if (!stats) return
+      this.underruns = stats.underrunEvents - start
+      const voices = this.shedder.update(stats.underrunEvents, performance.now())
+      if (voices === null) return
+      this.engine.send([Op.MaxVoices, voices, 0, 0])
+      this.onLoadChange(voices)
+    }, 1000)
+  }
+
+  // At most this many crashes in a minute are recovered; past that, the
+  // failure is likely to repeat, so it is reported instead of looping.
+  private static readonly MAX_CRASHES_PER_MINUTE = 3
+
+  /**
+   * Restarts a crashed engine with the kit, song and settings it had. The
+   * transport comes back stopped: resuming playback mid-crash would be a
+   * surprise.
+   */
+  private async recoverEngine(): Promise<void> {
+    const now = performance.now()
+    this.crashTimes = this.crashTimes.filter((t) => now - t < 60_000)
+    this.crashTimes.push(now)
+    this.playing = false
+    if (this.crashTimes.length > Studio.MAX_CRASHES_PER_MINUTE) {
+      this.onEngineRestart(false)
+      return
+    }
+    await this.engine.restart({
+      pads: this.pads.map((p) => p.data),
+      song: this.song?.data ?? null,
+      commands: this.settingsCommands(),
+    })
+    this.onEngineRestart(true)
+    this.changed(false)
   }
 
   private changed(persist = true): void {

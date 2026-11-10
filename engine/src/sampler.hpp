@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -18,21 +19,30 @@ struct PadSample {
 
 // One-shot sample voices. Each pad chokes itself: a new hit on a pad fades out
 // that pad's previous voice, so fast repeats stutter instead of piling up
-// (different pads still layer). At most kMaxVoices sound at once; a hit beyond
-// that steals the oldest voice. Choked and stolen voices fade out over ~1.3 ms
+// (different pads still layer). At most max_voices() sound at once (kMaxVoices
+// unless lowered to shed load); a hit beyond that steals the oldest voice. Choked and stolen voices fade out over ~1.3 ms
 // instead of being cut (no click); spare slots hold them while they fade.
 class Sampler {
 public:
     void reset() {
         for (auto& v : voices_) v = {};
         clock_ = 0;
+        max_voices_ = kMaxVoices;
     }
+
+    // The polyphony limit, 1..kMaxVoices. Lowering it (to shed load when the
+    // audio thread is overloaded) fades out the oldest voices over the limit.
+    void set_max_voices(std::size_t limit) {
+        max_voices_ = std::clamp<std::size_t>(limit, 1, kMaxVoices);
+        while (sounding_count() > max_voices_) oldest_sounding()->fade_step = kFadeStep;
+    }
+    std::size_t max_voices() const { return max_voices_; }
 
     void trigger(std::uint32_t pad, float gain, const PadSample& sample) {
         if (sample.length == 0) return;
         for (auto& v : voices_)
             if (v.active && v.pad == pad && v.fade_step == 0.0f) v.fade_step = kFadeStep;
-        if (sounding_count() >= kMaxVoices) {
+        if (sounding_count() >= max_voices_) {
             if (Voice* oldest = oldest_sounding()) oldest->fade_step = kFadeStep;
         }
         Voice* v = free_slot();
@@ -160,6 +170,7 @@ private:
 
     std::array<Voice, kSlots> voices_{};
     std::uint32_t clock_ = 0;
+    std::size_t max_voices_ = kMaxVoices;
 };
 
 }  // namespace webrack

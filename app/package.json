@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "bench": "node scripts/bench.ts",
-    "test": "node tests/record-gate.test.ts"
+    "perf:check": "node scripts/perf-check.ts",
+    "test": "node tests/record-gate.test.ts && node tests/load-shedder.test.ts"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

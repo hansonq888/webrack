@@ -20,6 +20,7 @@ export const Op = {
   Drive: 15, // f = 0-1
   Filter: 16, // f = -1 (low-pass) .. 0 (off) .. 1 (high-pass)
   Width: 17, // f = 0 (mono) .. 1 (as is) .. 1.5
+  MaxVoices: 18, // a = polyphony limit, 1-16 (lowered to shed load)
 } as const
 
 export const ReverbParam = { Size: 0, Damping: 1, PreDelayMs: 2, Mix: 3 } as const
@@ -47,6 +48,7 @@ export type PortMessage =
   | { type: 'song-begin'; id?: number }
   | { type: 'song-chunk'; offset: number; data: Int16Array; id?: number }
   | { type: 'song-commit'; frames: number; id?: number }
+  | { type: 'debug-crash'; id?: number } // development builds only: crash the processor to test recovery
 
 export type ProcessorReply =
   | { type: 'ready'; padCapacity: number; songCapacity: number }

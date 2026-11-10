@@ -11,6 +11,13 @@ import { BLOCK_SIZE, JsEngine } from './js-engine.ts'
 export const SAMPLE_RATE = 48000
 export const BUDGET_US = (BLOCK_SIZE / SAMPLE_RATE) * 1e6
 
+/** Display names of the three engines the benchmark compares. */
+export const ENGINES = {
+  simd: 'C++ → WASM (SIMD)',
+  scalar: 'C++ → WASM (scalar)',
+  js: 'JavaScript',
+} as const
+
 export interface BenchEngine {
   readonly name: string
   readonly outL: Float32Array
@@ -21,6 +28,8 @@ export interface BenchEngine {
   setSpeed(speed: number): void
   setEqGain(band: number, db: number): void
   setReverb(param: number, value: number): void
+  /** Drive, DJ filter and stereo width: in the C++ engine only, not the JavaScript port. */
+  setDeck?(drive: number, filter: number, width: number): void
   setPlaying(playing: boolean): void
   setSongPlaying(playing: boolean): void
   songPlaying(): boolean
@@ -41,7 +50,12 @@ export function makeInputs(): Inputs {
   return { pads, song }
 }
 
-export function setUp(engine: BenchEngine, inputs: Inputs): void {
+/**
+ * Loads the worst case. `fullChain` also turns on drive, the DJ filter and
+ * width, which only the C++ engine has; comparisons with the JavaScript port
+ * leave them off so both engines do the same work.
+ */
+export function setUp(engine: BenchEngine, inputs: Inputs, fullChain = false): void {
   inputs.pads.forEach((data, pad) => {
     engine.loadPad(pad, data)
     for (let s = 0; s < 16; s++) engine.setStep(pad, s, true)
@@ -55,6 +69,10 @@ export function setUp(engine: BenchEngine, inputs: Inputs): void {
   engine.setEqGain(2, 3)
   engine.setReverb(0, 0.85)
   engine.setReverb(3, 0.35)
+  if (fullChain) {
+    if (!engine.setDeck) throw new Error(`${engine.name} has no drive, filter or width`)
+    engine.setDeck(0.3, -0.3, 1.3)
+  }
   engine.setPlaying(true)
 }
 
@@ -73,11 +91,14 @@ export function run(engine: BenchEngine, blocks: number, now: () => number): Flo
 export interface Stats {
   blocks: number
   p50: number
+  p95: number
   p99: number
   p999: number
   max: number
   mean: number
   overBudget: number
+  /** Share of blocks over the deadline (overBudget / blocks). */
+  missRate: number
   realtimeFactor: number // seconds of audio rendered per second of compute
 }
 
@@ -93,11 +114,13 @@ export function summarize(us: Float64Array): Stats {
   return {
     blocks: us.length,
     p50: pct(0.5),
+    p95: pct(0.95),
     p99: pct(0.99),
     p999: pct(0.999),
     max: sorted[sorted.length - 1],
     mean: total / us.length,
     overBudget: over,
+    missRate: over / us.length,
     realtimeFactor: (us.length * BUDGET_US) / total,
   }
 }
@@ -123,7 +146,7 @@ export function jsEngine(): BenchEngine {
   const e = new JsEngine()
   e.init(SAMPLE_RATE)
   return {
-    name: 'JavaScript',
+    name: ENGINES.js,
     outL: e.outL,
     loadPad: (pad, data) => e.loadPad(pad, data),
     loadSong: (data) => e.loadSong(data),
@@ -158,18 +181,21 @@ interface WasmExports {
   wr_set_speed(speed: number): void
   wr_set_eq_gain(band: number, db: number): void
   wr_set_reverb(param: number, value: number): void
+  wr_set_drive(drive: number): void
+  wr_set_filter(position: number): void
+  wr_set_width(width: number): void
 }
 
 const SONG_PLAYING_WORD = 6 // Status::song_playing
 
-export function wasmEngine(module: WebAssembly.Module): BenchEngine {
+export function wasmEngine(module: WebAssembly.Module, name: string = ENGINES.simd): BenchEngine {
   const e = new WebAssembly.Instance(module, {}).exports as unknown as WasmExports
   e._initialize()
   e.wr_init(SAMPLE_RATE)
   const buffer = e.memory.buffer
   const status = new Int32Array(buffer, e.wr_status(), 8)
   return {
-    name: 'C++ → WASM',
+    name,
     outL: new Float32Array(buffer, e.wr_output(0), BLOCK_SIZE),
     loadPad: (pad, data) => {
       e.wr_pad_begin(pad)
@@ -185,6 +211,11 @@ export function wasmEngine(module: WebAssembly.Module): BenchEngine {
     setSpeed: (speed) => e.wr_set_speed(speed),
     setEqGain: (band, db) => e.wr_set_eq_gain(band, db),
     setReverb: (param, value) => e.wr_set_reverb(param, value),
+    setDeck: (drive, filter, width) => {
+      e.wr_set_drive(drive)
+      e.wr_set_filter(filter)
+      e.wr_set_width(width)
+    },
     setPlaying: (playing) => e.wr_set_playing(playing ? 1 : 0),
     setSongPlaying: (playing) => e.wr_song_set_playing(playing ? 1 : 0),
     songPlaying: () => status[SONG_PLAYING_WORD] !== 0,

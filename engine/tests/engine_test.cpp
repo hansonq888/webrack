@@ -122,6 +122,27 @@ static void test_polyphony_and_stealing() {
     CHECK(e.sounding_voices() == 16, "after the fade expected 16 voices, got %zu", e.sounding_voices());
 }
 
+// Shedding load: lowering the voice cap fades the oldest voices over it, new
+// hits respect it, and restoring it allows full polyphony again.
+static void test_voice_cap() {
+    std::printf("voice cap: lowering sheds the oldest voices, restoring lifts it\n");
+    Engine& e = g_engine;
+    e.init(kRate);
+    for (std::size_t p = 0; p < kNumPads; ++p) load_pad(e, p, std::vector<float>(48000, 0.01f));
+    for (std::size_t p = 0; p < kNumPads; ++p) e.trigger(p);
+    e.process();
+    e.set_max_voices(8);
+    CHECK(e.sounding_voices() == 8, "after capping at 8, %zu still sounding", e.sounding_voices());
+    e.process();  // the shed voices fade out within this block
+    for (std::size_t p = 0; p < 4; ++p) e.trigger(p);
+    e.process();
+    CHECK(e.sounding_voices() == 8, "new hits exceeded the cap: %zu sounding", e.sounding_voices());
+    e.set_max_voices(kMaxVoices);
+    for (std::size_t p = 0; p < kNumPads; ++p) e.trigger(p);
+    e.process();
+    CHECK(e.sounding_voices() == 16, "after restoring the cap expected 16, got %zu", e.sounding_voices());
+}
+
 // A repeat hit on the same pad cuts the previous one (with a short fade)
 // instead of layering on top of it.
 static void test_retrigger_chokes_same_pad() {
@@ -375,6 +396,7 @@ int main() {
     test_sequencer_is_sample_accurate();
     test_reverb_mix_zero_is_bypass();
     test_polyphony_and_stealing();
+    test_voice_cap();
     test_retrigger_chokes_same_pad();
     test_longer_patterns();
     test_stop_all_silences_everything();

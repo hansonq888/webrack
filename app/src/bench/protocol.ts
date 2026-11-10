@@ -3,19 +3,20 @@
 import type { Inputs, Stats } from './scenario.ts'
 
 export interface WorkerRequest {
-  module: WebAssembly.Module
+  modules: { simd: WebAssembly.Module; scalar: WebAssembly.Module }
   minutes: number
 }
 
 export type WorkerReply =
   | { type: 'progress'; label: string }
-  | { type: 'done'; parityDb: number; results: Record<string, Stats & { wallMeanUs: number }> }
+  | { type: 'done'; buildsIdentical: boolean; parityDb: number; results: Record<string, Stats & { wallMeanUs: number }> }
 
 export interface WorkletOptions {
   module: WebAssembly.Module
   inputs: Inputs
   blocks: number
   clock: SharedArrayBuffer // the tick-clock Worker's counter
+  fullChain: boolean // also run drive, the DJ filter and width
 }
 
 /** Ticks of the shared clock spent in each render call. */

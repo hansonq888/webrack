@@ -15,6 +15,17 @@ jobs:
         env:
           CXX: clang++
 
+  sanitizers:
+    name: Engine tests (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same address-space randomization limit as the ThreadSanitizer job.
+      - run: sudo sysctl vm.mmap_rnd_bits=28
+      - run: engine/test.sh asan
+        env:
+          CXX: clang++
+
   spsc:
     name: SPSC queue (ThreadSanitizer)
     runs-on: ubuntu-latest
@@ -28,7 +39,7 @@ jobs:
           CXX: clang++
 
   wasm:
-    name: engine.wasm is up to date
+    name: engine.wasm builds are up to date
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,9 +47,31 @@ jobs:
         with:
           version: 6.0.10
       - run: engine/build.sh
-      # The build is reproducible, so a rebuilt engine.wasm that differs from
-      # the committed one means someone changed C++ without rebuilding.
-      - run: git diff --exit-code --stat app/public/engine.wasm
+      # The builds are reproducible, so a rebuilt binary that differs from the
+      # committed one means someone changed C++ without rebuilding.
+      - run: git diff --exit-code --stat app/public/engine.wasm app/public/engine-scalar.wasm
+
+  perf:
+    name: Performance regression check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The base is the previous commit's engine (for a pull request, the
+      # base branch: a merge commit's first parent). Both run on this machine,
+      # in this job, so runner-to-runner differences cancel out.
+      - run: git show HEAD~1:app/public/engine.wasm > "$RUNNER_TEMP/base.wasm" || cp app/public/engine.wasm "$RUNNER_TEMP/base.wasm"
+      - run: node scripts/perf-check.ts --base "$RUNNER_TEMP/base.wasm" --seconds 60 --rounds 5 --json "$RUNNER_TEMP/perf.json"
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-${{ github.sha }}
+          path: ${{ runner.temp }}/perf.json
 
   app:
     name: App typecheck, build and tests

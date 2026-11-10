@@ -307,6 +307,9 @@ class StudioView {
     this.bindControls()
     studio.onChange = () => this.render()
     studio.onRecordEvent = (event) => this.onRecordEvent(event)
+    studio.onLoadChange = (voices) => this.flash(voices < 16 ? `HIGH LOAD · ${voices} VOICES` : 'LOAD OK · 16 VOICES', 3000)
+    studio.onEngineRestart = (recovered) =>
+      recovered ? this.flash('AUDIO ENGINE RESTARTED', 3000) : this.flash('AUDIO ENGINE FAILED · RELOAD', 600_000)
     this.render()
     requestAnimationFrame(this.frame)
   }

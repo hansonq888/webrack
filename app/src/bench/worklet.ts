@@ -15,7 +15,7 @@ class BenchProcessor extends AudioWorkletProcessor {
     super(options)
     const opts = options.processorOptions as WorkletOptions
     this.engine = wasmEngine(opts.module)
-    setUp(this.engine, opts.inputs)
+    setUp(this.engine, opts.inputs, opts.fullChain)
     this.clock = new Int32Array(opts.clock)
     this.ticks = new Float64Array(opts.blocks)
   }

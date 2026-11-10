@@ -17,9 +17,10 @@
       <dl id="env"></dl>
 
       <section>
-        <h2>C++/WASM vs JavaScript</h2>
+        <h2>SIMD vs scalar vs JavaScript</h2>
         <p class="note">
-          In a Web Worker. The JavaScript engine is a line-by-line port of the C++ with the same scenario and inputs.
+          In a Web Worker: the engine built with WebAssembly SIMD, the same source built without it, and a
+          line-by-line JavaScript port, all with the same scenario and inputs.
         </p>
         <div class="controls">
           <label>Audio per engine
@@ -37,13 +38,50 @@
 
       <section>
         <h2>On the real audio thread</h2>
-        <p class="note">The WASM engine inside an AudioWorklet, in real time. Output is silent.</p>
-        <div class="controls"><button id="run-worklet">Run for 30 s</button></div>
+        <p class="note">
+          The WASM engine running the full chain (including drive, the DJ filter and width) inside an AudioWorklet,
+          in real time, with silent output. Each block is timed by a shared-memory clock, since AudioWorklets have no
+          timer. Underruns are the browser's own count of output glitches, where it reports them.
+        </p>
+        <div class="controls">
+          <label>Duration
+            <select id="wl-seconds">
+              <option value="30" selected>30 s</option>
+              <option value="120">2 min</option>
+              <option value="600">10 min</option>
+            </select>
+          </label>
+          <label>Build
+            <select id="wl-build">
+              <option value="simd" selected>SIMD</option>
+              <option value="scalar">scalar</option>
+            </select>
+          </label>
+          <label>Runs
+            <select id="wl-runs">
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+            </select>
+          </label>
+          <label>CPU contention
+            <select id="wl-contention">
+              <option value="0" selected>none</option>
+              <option value="2">2 busy cores</option>
+              <option value="4">4 busy cores</option>
+              <option value="all">all other cores</option>
+            </select>
+          </label>
+          <button id="run-worklet">Run</button>
+        </div>
         <p class="status" id="worklet-status"></p>
         <div id="worklet-results"></div>
       </section>
 
-      <button class="copy" id="copy">Copy results as JSON</button>
+      <div class="controls report">
+        <button id="download">Download report</button>
+        <button id="copy">Copy results as JSON</button>
+      </div>
     </main>
     <script type="module" src="/src/bench/page.ts"></script>
   </body>

@@ -76,6 +76,7 @@ public:
     void set_eq_gain(std::size_t band, float db) { eq_.set_gain_db(band, db); }
     void set_reverb(dsp::Reverb::Param param, float value) { reverb_.set(param, value); }
     void set_master_gain(float gain) { master_gain_ = gain; }
+    void set_max_voices(std::size_t limit) { sampler_.set_max_voices(limit); }
     void set_drive(float drive) { drive_.set(drive); }
     void set_filter(float position) { filter_.set(position); }
     void set_width(float width) { width_.set(width); }

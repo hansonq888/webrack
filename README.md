@@ -36,7 +36,9 @@ Some things I cared about:
 - **Sample-accurate sequencing.** The engine splits each block at the exact sample where a step lands, so timing doesn't drift or snap to block boundaries. A test checks every hit's sample index across different tempos and speeds.
 - **The WASM has no imports.** It's built with `-sSTANDALONE_WASM` and a fixed memory size, and the worklet instantiates it directly without any Emscripten JS glue.
 - **Export uses the same code.** Exporting runs the same worklet and engine inside an `OfflineAudioContext`, so the file sounds exactly like what you heard.
-- **SIMD where the time goes.** Profiling showed the sampler's interpolation and the reverb's delay lines were the hot spots, so both run 4 samples at a time with WebAssembly SIMD128. The output is bit-identical to the scalar code, and a test checks that.
+- **SIMD where the time goes, with a fallback.** Profiling showed the sampler's interpolation and the reverb's delay lines were the hot spots, so both run 4 samples at a time with WebAssembly SIMD128. The same source is also built without SIMD; the app detects support at load and fetches the matching build. Both builds produce bit-identical audio, and tests check that.
+- **Recovers from crashes.** If the audio processor crashes (an uncaught error or a WebAssembly trap), the app starts a new one with the kit, song and settings restored, and stops retrying after 3 crashes in a minute.
+- **Sheds load under overload.** Where the browser reports output underruns (Chrome's `AudioContext.playbackStats`), the app watches the count. When glitches cluster (2 within 5 s), it lowers the voice cap 16 → 8 → 4, fading out the oldest voices, and restores one step after each 30 s of clean output.
 
 The DSP I wrote for this project:
 - Freeverb-style reverb with pre-delay and an input high-pass.
@@ -54,14 +56,15 @@ I wanted to check this instead of just assuming it, so I ported the engine line 
 
 | | median block time | throughput |
 |---|---|---|
-| C++ → WASM (SIMD) | 8.0 to 8.2 µs | 327 to 330× real time |
-| C++ → WASM (before SIMD) | 11.1 to 11.4 µs | 210 to 233× real time |
-| JavaScript | 18.5 to 18.7 µs | 147 to 148× real time |
+| C++ → WASM, SIMD build | 7.7 to 7.8 µs | 335 to 338× real time |
+| C++ → WASM, same code without SIMD | 9.2 µs | 288 to 290× real time |
+| C++ → WASM, before the SIMD work | 11.1 to 11.4 µs | 210 to 233× real time |
+| JavaScript | 18.3 to 18.4 µs | 139 to 150× real time |
 
-WASM is now **2.2× faster than JavaScript** in throughput. It was 1.7× before SIMD, and SIMD alone made the engine 1.35× faster.
+WASM is **2.3× faster than JavaScript** at the median (it was 1.7× before the SIMD work). That work made the engine about 1.4× faster in two parts: restructuring the loops so they could be vectorized was itself faster (11.1 → 9.2 µs, because the reverb now runs block by block and the sampler skips bounds checks on its fast path), and the SIMD instructions added 1.17× on top (9.2 → 7.8 µs).
 
 **In the browser.** The [`/bench`](https://webrack.hansonqin.com/bench/) page runs the same benchmark in your browser. It has two modes:
-- **Web Worker:** WASM vs JavaScript. In Chrome 152 the mean block time was 7.8 µs for WASM and 16.2 µs for JavaScript, which is 2.1×.
+- **Web Worker:** the SIMD build, the scalar build and JavaScript. In Chrome 152 the mean block time was 7.8 µs for SIMD WASM and 16.2 µs for JavaScript, which is 2.1×.
 - **Real audio thread:** the engine inside an AudioWorklet, in real time. Chrome gives AudioWorklets no timer, so a Web Worker spins an atomic counter in a `SharedArrayBuffer` and the worklet reads it around each render call. That is about 9 ns resolution, calibrated against `performance.now()`. Over 30 s in Chrome 152 the median was 9.1 µs and the p99 20 µs, with 0 of 11,250 blocks over budget.
 
 To be honest, both engines are far under the 2.7 ms budget on a laptop. The difference matters more on slower phones and for heavier DSP.
@@ -87,13 +90,15 @@ You need Node 22+. Rebuilding the engine also needs [Emscripten](https://emscrip
 cd app && npm install && npm run dev   # app on localhost
 cd engine && ./test.sh                 # native engine tests
 cd engine && ./test.sh bench           # 10-minute soak benchmark
+cd engine && ./test.sh asan            # engine tests under ASan + UBSan
 cd engine && ./test.sh spsc            # lock-free queue, under ThreadSanitizer too
 cd engine && ./test.sh cacheline       # false-sharing benchmark
 cd engine && ./build.sh                # rebuild app/public/engine.wasm
-cd app && npm run bench                # JS vs WASM benchmark in Node
+cd app && npm run bench                # SIMD vs scalar vs JavaScript, in Node
+cd app && npm run perf:check -- --base old/engine.wasm   # regression check against another build
 ```
 
-The in-browser benchmark is at `/bench/` on the dev server. CI runs the native tests, rebuilds `engine.wasm` to check the committed one is current, and type-checks, builds and tests the app.
+The in-browser benchmark is at `/bench/` on the dev server; `?engine=scalar` on the app forces the non-SIMD build. CI runs the native engine tests, the same tests under AddressSanitizer and UndefinedBehaviorSanitizer, the lock-free queue tests under ThreadSanitizer, rebuilds both WASM builds to check the committed ones are current, and type-checks, builds and tests the app. A **performance regression check** benchmarks this commit's engine against the previous commit's on the same runner (5 alternating rounds of 60 s of audio, medians compared) and fails if it is more than 10% slower; each run's numbers are kept as a build artifact.
 
 ## What's next
 

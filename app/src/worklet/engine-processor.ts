@@ -37,6 +37,7 @@ interface EngineExports {
   wr_stop_after_steps(steps: number): void
   wr_set_pattern_length(steps: number): void
   wr_stop_all(): void
+  wr_set_max_voices(limit: number): void
   wr_set_drive(drive: number): void
   wr_set_filter(position: number): void
   wr_set_width(width: number): void
@@ -63,6 +64,7 @@ class EngineProcessor extends AudioWorkletProcessor {
   private readonly status: Int32Array
   private readonly apply = (op: number, a: number, b: number, f: number) => this.applyCommand(op, a, b, f)
   private blocks = 0
+  private crashRequested = false // development builds only
 
   constructor(options: AudioWorkletNodeOptions) {
     super(options)
@@ -90,6 +92,7 @@ class EngineProcessor extends AudioWorkletProcessor {
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+    if (import.meta.env.DEV && this.crashRequested) throw new Error('debug crash: testing engine recovery')
     this.ring?.drain(this.apply)
     this.engine.wr_process()
 
@@ -126,6 +129,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       case Op.Drive: e.wr_set_drive(f); break
       case Op.Filter: e.wr_set_filter(f); break
       case Op.Width: e.wr_set_width(f); break
+      case Op.MaxVoices: e.wr_set_max_voices(a); break
     }
   }
 
@@ -165,6 +169,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         break
       case 'song-commit':
         e.wr_song_commit(msg.frames)
+        break
+      case 'debug-crash':
+        if (import.meta.env.DEV) this.crashRequested = true
         break
     }
     if (msg.id !== undefined) this.reply({ type: 'ack', id: msg.id })

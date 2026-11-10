@@ -3,6 +3,7 @@
 // start screen (no studio yet) the menu shows only the themes.
 
 import type { Studio } from '../state/studio'
+import { engineBuild } from '../engine/client'
 import { FINISHES, applyFinish, type Finish } from './finish'
 
 const KEYS_PREF = 'webrack.keyLetters'
@@ -86,7 +87,8 @@ export function bindSettings(root: HTMLElement, studio: Studio | null, flash: (m
     if (audio && studio) {
       const c = studio.context
       const latency = ((c.baseLatency ?? 0) + (c.outputLatency ?? 0)) * 1000
-      audio.textContent = `${(c.sampleRate / 1000).toFixed(1)} kHz · ${latency.toFixed(0)} ms output · C++/WASM engine`
+      audio.textContent = `${(c.sampleRate / 1000).toFixed(1)} kHz · ${latency.toFixed(0)} ms output · C++/WASM engine (${engineBuild === 'simd' ? 'SIMD' : 'scalar'})` +
+        (studio.underruns === null ? '' : ` · ${studio.underruns} underruns`)
     }
   }
 
